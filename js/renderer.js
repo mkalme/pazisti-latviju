@@ -81,7 +81,9 @@
       hoodColorOf: null,    // fn(hoodId) -> palette key | null
       featQuiz: null,       // {items, colorOf}: bridges/parks quiz layer
       shadeHoods: false,    // study-mode pastel shading
-      majorsOnly: false     // study-mode filter
+      majorsOnly: false,    // study-mode filter
+      focusIds: null,       // Set: sub-level members; everything else grays
+      focusRings: null      // the containing municipality's outline
     }
   };
   renderer.COLORS = COLORS;
@@ -174,10 +176,13 @@
       for (h = 0; h < data.hoods.length; h++) {
         hood = data.hoods[h];
         if (!App.geom.bboxIntersects(hood.bbox, cull)) continue;
+        // sub-level focus: territories outside the level fade toward bg
+        ctx.globalAlpha = cfg.focusIds && !cfg.focusIds.has(hood.id) ? 0.35 : 1;
         ctx.beginPath();
         traceRings(ctx, hood.rings, bview);
         ctx.fill("evenodd");
       }
+      ctx.globalAlpha = 1;
     }
 
     // Water: all bodies are disjoint, so one batched even-odd fill
@@ -221,11 +226,13 @@
         ctx.globalAlpha = 1;
       }
     }
-    // Neighborhood boundaries: one batched stroke
+    // Neighborhood boundaries: one batched stroke (sub-level focus splits
+    // it: members get the quiz border, the grayed rest a faint line)
     ctx.beginPath();
     for (h = 0; h < data.hoods.length; h++) {
       hood = data.hoods[h];
       if (hood.id === cfg.activeHood || !App.geom.bboxIntersects(hood.bbox, cull)) continue;
+      if (cfg.focusIds && !cfg.focusIds.has(hood.id)) continue;
       traceRings(ctx, hood.rings, bview);
     }
     // The Latvia map is dense with borders: a SOLID line sized in DEVICE
@@ -238,6 +245,26 @@
       : cfg.hoodQuiz ? COLORS.hoodStrong : COLORS.hoodLine;
     ctx.lineWidth = data.land ? 1.25 / res : cfg.hoodQuiz ? 2 : 1;
     ctx.stroke();
+    if (cfg.focusIds) {
+      ctx.beginPath();
+      for (h = 0; h < data.hoods.length; h++) {
+        hood = data.hoods[h];
+        if (cfg.focusIds.has(hood.id)
+            || !App.geom.bboxIntersects(hood.bbox, cull)) continue;
+        traceRings(ctx, hood.rings, bview);
+      }
+      ctx.strokeStyle = COLORS.hoodLine;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    if (cfg.focusRings) {
+      // the containing municipality, highlighted
+      ctx.beginPath();
+      traceRings(ctx, cfg.focusRings, bview);
+      ctx.strokeStyle = COLORS.activeHoodLine;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
     if (cfg.activeHood >= 0) {
       hood = data.hoods[cfg.activeHood];
       ctx.beginPath();

@@ -31,9 +31,13 @@
       });
     });
 
-    var specials = [
+    // The street modes live in their own collapsible category; the
+    // citywide row keeps the polygon/feature quizzes.
+    var streetTop = [
       { id: "majors", name: "Major arteries", note: "citywide", hoodId: -1, ids: majors },
-      { id: "all", name: "Whole city", note: "marathon · a long game", hoodId: -1, ids: all },
+      { id: "all", name: "Whole city", note: "marathon · a long game", hoodId: -1, ids: all }
+    ];
+    var specials = [
       { id: "hoods", kind: "hoods", name: "Neighborhoods",
         note: "citywide · click the district", hoodId: -1,
         ids: data.hoods.map(function (h) { return h.id; }),
@@ -62,6 +66,7 @@
     // Countrywide Latvia level — its own dataset, swapped in by startGame.
     // Guarded: the page still works if data/latvia_data.js is absent.
     var latvia = [];
+    var pagLevels = [];
     if (window.LATVIA_DATA) {
       var lv = window.LATVIA_DATA;
       latvia.push({ id: "lv:all", kind: "latvia",
@@ -90,6 +95,31 @@
           ids: lv.citiesAll.map(function (c) { return c.id; }),
           itemCount: lv.citiesAll.length, bbox: lv.meta.bounds, ds: lv });
       }
+      // Second-level mosaic: one marathon card + a per-novads section,
+      // all sharing a virtual dataset whose hoods ARE the pagasti
+      if (lv.pagasti && lv.pagasti.length) {
+        var lvp = Object.assign({}, lv, { hoods: lv.pagasti });
+        // the marathon heads its own category, above the per-novads levels
+        pagLevels.push({ id: "lv:pagasti", kind: "lvpagasti",
+          name: "All pagasti & cities",
+          note: "marathon · click the territory", hoodId: -1,
+          ids: lv.pagasti.map(function (h) { return h.id; }),
+          itemCount: lv.pagasti.length, bbox: lv.meta.bounds, ds: lvp });
+        var perNov = new Map();
+        lv.pagasti.forEach(function (p) {
+          if (p.nov < 0) return;
+          if (!perNov.has(p.nov)) perNov.set(p.nov, []);
+          perNov.get(p.nov).push(p.id);
+        });
+        lv.hoods.forEach(function (u) {
+          var ids = perNov.get(u.id);
+          if (!ids || ids.length < 2) return;
+          pagLevels.push({ id: "lv:pag:" + u.id, kind: "lvpagasti",
+            name: u.name, note: "click the territory", hoodId: -1,
+            ids: ids, itemCount: ids.length, bbox: u.bbox, ds: lvp,
+            sub: 1, focusRings: u.rings });
+        });
+      }
       // Countrywide feature quizzes, one card per dataset key
       [["regions", "lvregions", "Historical regions", "click the region"],
        ["rivers", "lvrivers", "Rivers", "click the river"],
@@ -115,12 +145,13 @@
       return { id: "hood:" + h.id, name: h.name, note: "", hoodId: h.id, ids: ids };
     }).filter(function (l) { return l.ids.length > 0; });
 
-    specials.concat(hoods).forEach(function (l) {
+    streetTop.concat(specials, hoods).forEach(function (l) {
       if (l.kind) return; // hoods/bridges levels are already decorated
       l.itemCount = countNames(data, l.ids);
       l.bbox = l.hoodId >= 0 ? data.hoods[l.hoodId].bbox : bboxOfIds(data, l.ids);
     });
-    return { specials: specials, transport: transport, latvia: latvia, hoods: hoods };
+    return { specials: specials, transport: transport, latvia: latvia,
+             pagasti: pagLevels, streets: streetTop.concat(hoods) };
   }
 
   App.levels = { build: build };

@@ -169,6 +169,14 @@ def queries():
         f'[out:json][timeout:600];{lv}'
         'nwr(area.lv)["historic"="castle"]["name"];out geom qt;'
     )
+    # The full second-level mosaic: pagasti (admin_level=8, ~511) plus
+    # novadu pilsētas and the titular cities (admin_level=7). The 7 state
+    # cities come from latvia_admin. Large response: ~590 relations.
+    qs["latvia_pagasti"] = (
+        f'[out:json][timeout:600];{lv}'
+        'relation(area.lv)["boundary"="administrative"]'
+        '["admin_level"~"^(7|8)$"];out geom qt;'
+    )
     # The five historical lands (kultūrvēsturiskās zemes) are mapped as
     # boundary=traditional relations — NOT the statistical/planning regions
     # that share these names, nor the villages called Zemgale/Sēlija.
@@ -271,7 +279,7 @@ def verify_latvia():
         sys.exit("FATAL: latvia_admin looks wrong, aborting")
     for extra in ("latvia_cities", "latvia_places", "latvia_water",
                   "latvia_rivers", "latvia_roads", "latvia_castles",
-                  "latvia_nature", "latvia_regions"):
+                  "latvia_nature", "latvia_regions", "latvia_pagasti"):
         path = RAW_DIR / f"{extra}.json"
         if path.exists():
             n = len(json.loads(path.read_text())["elements"])

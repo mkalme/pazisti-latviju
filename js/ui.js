@@ -13,6 +13,7 @@
 
   /* Per-kind lookups: card unit, summary wording, feature dataset, thumb hue */
   var KIND_UNIT = { hoods: " areas", latvia: " territories",
+    lvpagasti: " territories",
     lvcities: " cities", lvcities5k: " cities", lvcitiesall: " towns",
     lvrivers: " rivers",
     lvlakes: " lakes", lvroads: " roads", lvcastles: " castles",
@@ -21,6 +22,7 @@
     tram: " lines", trolleybus: " lines", busday: " lines",
     busnight: " lines", rail: " lines" };
   var KIND_MISSED = { hoods: "Missed neighborhoods", latvia: "Missed territories",
+    lvpagasti: "Missed territories",
     lvcities: "Missed cities", lvcities5k: "Missed cities",
     lvcitiesall: "Missed towns",
     lvrivers: "Missed rivers", lvlakes: "Missed lakes",
@@ -29,7 +31,7 @@
     bridges: "Missed bridges",
     parks: "Missed parks", tram: "Missed lines", trolleybus: "Missed lines",
     busday: "Missed lines", busnight: "Missed lines", rail: "Missed lines" };
-  var KIND_POLY = { hoods: 1, latvia: 1 }; // polygon-quiz kinds (hoodgame engine)
+  var KIND_POLY = { hoods: 1, latvia: 1, lvpagasti: 1 }; // hoodgame kinds
   var TRANSIT_HUE = { tram: "hsla(0, 65%, 55%, 0.9)",
     trolleybus: "hsla(140, 50%, 45%, 0.9)", busday: "hsla(215, 65%, 55%, 0.9)",
     busnight: "hsla(270, 55%, 60%, 0.9)", rail: "hsla(0, 0%, 60%, 0.95)" };
@@ -86,8 +88,8 @@
 
   /* --- menu thumbnails: tiny city map, this level highlighted --- */
 
-  function thumbTransform(size, data) {
-    var b = data.meta.bounds;
+  function thumbTransform(size, data, bbox) {
+    var b = bbox || data.meta.bounds;
     var w = b[2] - b[0], h = b[3] - b[1];
     var s = (size * 0.92) / Math.max(w, h);
     // Offset by the bbox origin: Latvia's bounds do not start at [0, 0]
@@ -132,11 +134,27 @@
     ctx.scale(dpr, dpr);
     var t = thumbTransform(THUMB, data);
     var C = App.renderer.COLORS;
-    if (level.ds) {
+    if (level.ds && level.sub) {
+      // Per-novads card: a mini-map fitted to the municipality, showing
+      // only its own territories as a pastel mosaic
+      t = thumbTransform(THUMB, data, level.bbox);
+      level.ids.forEach(function (id) {
+        var u = data.hoods[id];
+        ctx.beginPath();
+        traceRingsT(ctx, u.rings, t);
+        ctx.fillStyle = C.thumbBase;
+        ctx.fill("evenodd");
+        ctx.fillStyle = "hsla(" + ((u.id * 47) % 360) + ", 45%, 55%, 0.45)";
+        ctx.fill("evenodd");
+        ctx.strokeStyle = C.hoodLine;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      });
+    } else if (level.ds) {
       // Latvia family: land base (mosaic tints for the territories card),
       // decor water, then this card's quiz features per the LV_THUMB spec.
       // Per-unit fills so enclave holes and carved cities tile correctly.
-      var mosaic = level.kind === "latvia";
+      var mosaic = level.kind === "latvia" || level.kind === "lvpagasti";
       data.hoods.forEach(function (h) {
         ctx.beginPath();
         traceRingsT(ctx, h.rings, t);
@@ -298,6 +316,40 @@
   }
 
   var hoodCards = []; // {el, key} for the search filter
+  var pagCards = [];  // same, for the per-municipality pagasti section
+  var currentCat = null; // open category submenu: "pagasti" | "streets"
+
+  function setCategory(cat) {
+    currentCat = cat;
+    $("menu-root").classList.toggle("hidden", !!cat);
+    $("menu-sub").classList.toggle("hidden", !cat);
+    $("sub-pagasti").classList.toggle("hidden", cat !== "pagasti");
+    $("sub-streets").classList.toggle("hidden", cat !== "streets");
+    $("sub-title").textContent =
+      cat === "pagasti" ? "Pagasti" : cat === "streets" ? "Riga streets" : "";
+    var panel = document.querySelector(".menu-panel");
+    if (panel) panel.scrollTop = 0;
+  }
+
+  /* A card that opens a category submenu instead of starting a level */
+  function folderCard(name, count, thumbLevel, cat, dpr) {
+    var btn = document.createElement("button");
+    btn.className = "level-card folder";
+    var cv = document.createElement("canvas");
+    cv.className = "thumb";
+    drawThumb(cv, thumbLevel, dpr);
+    btn.appendChild(cv);
+    var nm = document.createElement("span");
+    nm.className = "lv-name";
+    nm.textContent = name;
+    btn.appendChild(nm);
+    var meta = document.createElement("span");
+    meta.className = "lv-meta";
+    meta.textContent = count + " levels";
+    btn.appendChild(meta);
+    btn.addEventListener("click", function () { setCategory(cat); });
+    return btn;
+  }
 
   /* Case- and diacritic-insensitive: "agens" matches "Āgenskalns". */
   function searchKey(s) {
@@ -315,6 +367,17 @@
     els.hoodNone.classList.toggle("hidden", visible > 0);
   }
 
+  function applyPagFilter() {
+    var q = searchKey(els.pagSearch.value.trim());
+    var visible = 0;
+    pagCards.forEach(function (c) {
+      var show = !q || c.key.indexOf(q) >= 0;
+      c.el.classList.toggle("hidden", !show);
+      if (show) visible++;
+    });
+    els.pagNone.classList.toggle("hidden", visible > 0);
+  }
+
   function buildMenu(levels) {
     var theme = document.documentElement.dataset.theme || "light";
     var dpr = window.devicePixelRatio || 1;
@@ -327,16 +390,38 @@
     els.menuHoods.innerHTML = "";
     hoodCards = [];
     levels.specials.forEach(function (l) { els.menuSpecials.appendChild(levelCard(l, dpr, theme)); });
+    // the street modes live behind a folder card in the Citywide row
+    els.menuSpecials.appendChild(folderCard("Riga streets",
+      levels.streets.length, levels.streets[1] || levels.streets[0],
+      "streets", dpr));
     levels.transport.forEach(function (l) { els.menuTransport.appendChild(levelCard(l, dpr, theme)); });
     // Latvia section vanishes as a whole when its data file is absent
     var lvLevels = levels.latvia || [];
     $("menu-latvia-h2").classList.toggle("hidden", !lvLevels.length);
     els.menuLatvia.classList.toggle("hidden", !lvLevels.length);
     lvLevels.forEach(function (l) { els.menuLatvia.appendChild(levelCard(l, dpr, theme)); });
-    levels.hoods.forEach(function (l) {
+    var pagLevels = levels.pagasti || [];
+    if (pagLevels.length) {
+      // the pagasti levels live behind a folder card in the Latvia row
+      els.menuLatvia.appendChild(folderCard("Pagasti",
+        pagLevels.length, pagLevels[0], "pagasti", dpr));
+    }
+    els.menuPagasti.innerHTML = "";
+    pagCards = [];
+    pagLevels.forEach(function (l) {
+      var card = levelCard(l, dpr, theme);
+      els.menuPagasti.appendChild(card);
+      // the marathon stays pinned; per-novads cards join the filter
+      if (l.sub) pagCards.push({ el: card, key: searchKey(l.name) });
+    });
+    applyPagFilter();
+    setCategory(pagLevels.length || currentCat !== "pagasti" ? currentCat : null);
+    levels.streets.forEach(function (l) {
       var card = levelCard(l, dpr, theme);
       els.menuHoods.appendChild(card);
-      hoodCards.push({ el: card, key: searchKey(l.name) });
+      // only the per-neighborhood levels take part in the search filter;
+      // Majors/Whole city stay pinned at the top of the category
+      if (l.hoodId >= 0) hoodCards.push({ el: card, key: searchKey(l.name) });
     });
     applyHoodFilter();
   }
@@ -447,6 +532,9 @@
     els.menuSpecials = $("menu-specials");
     els.menuTransport = $("menu-transport");
     els.menuLatvia = $("menu-latvia");
+    els.menuPagasti = $("menu-pagasti");
+    els.pagSearch = $("pag-search");
+    els.pagNone = $("pag-none");
     els.menuHoods = $("menu-hoods");
     els.hoodSearch = $("hood-search");
     els.hoodNone = $("hood-none");
@@ -471,6 +559,15 @@
         e.stopPropagation();
       }
     });
+    els.pagSearch.addEventListener("input", applyPagFilter);
+    els.pagSearch.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && els.pagSearch.value) {
+        els.pagSearch.value = "";
+        applyPagFilter();
+        e.stopPropagation();
+      }
+    });
+    $("btn-sub-back").addEventListener("click", function () { setCategory(null); });
     $("btn-study").addEventListener("click", function () { App.startStudy(); });
     $("btn-quit").addEventListener("click", function () { App.showMenu(); });
     $("btn-restart").addEventListener("click", function () { App.restartLevel(); });
@@ -490,6 +587,10 @@
   App.ui = {
     init: init,
     showScreen: showScreen,
+    menuBack: function () {
+      if (currentCat) { setCategory(null); return true; }
+      return false;
+    },
     buildMenu: buildMenu,
     setPrompt: setPrompt,
     promptFeedback: promptFeedback,

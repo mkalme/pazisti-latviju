@@ -12,7 +12,7 @@ try {
   if (t) document.documentElement.dataset.theme = t;
 } catch (e) {}
 </script>
-<link rel="stylesheet" href="css/style.css?v=39">
+<link rel="stylesheet" href="css/style.css?v=42">
 </head>
 <body>
 
@@ -30,21 +30,36 @@ python3 tools/build_data.py</pre>
 
 <div id="menu" class="screen hidden">
   <div class="panel menu-panel">
-    <h1>Riga Streets</h1>
-    <p class="subtitle">The game names a street — click it on the map.
-      Green: first try. Yellow: second. Orange: third. Red: revealed.</p>
-    <button id="btn-study" class="btn btn-wide">🔍 Study the map</button>
-    <h2>Citywide</h2>
-    <div id="menu-specials" class="level-list"></div>
-    <h2>Public transport</h2>
-    <div id="menu-transport" class="level-list"></div>
-    <h2 id="menu-latvia-h2">Latvia</h2>
-    <div id="menu-latvia" class="level-list"></div>
-    <h2>Neighborhoods</h2>
-    <input id="hood-search" type="search" placeholder="Search neighborhoods…"
-           autocomplete="off" spellcheck="false">
-    <div id="hood-none" class="hood-none hidden">No neighborhood matches</div>
-    <div id="menu-hoods" class="level-list"></div>
+    <div id="menu-root">
+      <h1>Riga Streets</h1>
+      <p class="subtitle">The game names a street — click it on the map.
+        Green: first try. Yellow: second. Orange: third. Red: revealed.</p>
+      <button id="btn-study" class="btn btn-wide">🔍 Study the map</button>
+      <h2>Citywide</h2>
+      <div id="menu-specials" class="level-list"></div>
+      <h2>Public transport</h2>
+      <div id="menu-transport" class="level-list"></div>
+      <h2 id="menu-latvia-h2">Latvia</h2>
+      <div id="menu-latvia" class="level-list"></div>
+    </div>
+    <div id="menu-sub" class="hidden">
+      <div class="sub-head">
+        <button id="btn-sub-back" class="btn btn-small">‹ Back</button>
+        <h1 id="sub-title"></h1>
+      </div>
+      <div id="sub-pagasti" class="hidden">
+        <input id="pag-search" type="search" placeholder="Search municipalities…"
+               autocomplete="off" spellcheck="false">
+        <div id="pag-none" class="hood-none hidden">No municipality matches</div>
+        <div id="menu-pagasti" class="level-list"></div>
+      </div>
+      <div id="sub-streets" class="hidden">
+        <input id="hood-search" type="search" placeholder="Search neighborhoods…"
+               autocomplete="off" spellcheck="false">
+        <div id="hood-none" class="hood-none hidden">No neighborhood matches</div>
+        <div id="menu-hoods" class="level-list"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -105,20 +120,20 @@ python3 tools/build_data.py</pre>
 <div id="attribution">Map data © <a href="https://www.openstreetmap.org/copyright"
   target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
 
-<script src="data/riga_data.js?v=39"></script>
-<script src="data/latvia_data.js?v=39"></script>
-<script src="js/geometry.js?v=39"></script>
-<script src="js/spatial.js?v=39"></script>
-<script src="js/view.js?v=39"></script>
-<script src="js/renderer.js?v=39"></script>
-<script src="js/levels.js?v=39"></script>
-<script src="js/storage.js?v=39"></script>
-<script src="js/sound.js?v=39"></script>
-<script src="js/study.js?v=39"></script>
-<script src="js/game.js?v=39"></script>
-<script src="js/hoodgame.js?v=39"></script>
-<script src="js/featgame.js?v=39"></script>
-<script src="js/ui.js?v=39"></script>
-<script src="js/main.js?v=39"></script>
+<script src="data/riga_data.js?v=42"></script>
+<script src="data/latvia_data.js?v=42"></script>
+<script src="js/geometry.js?v=42"></script>
+<script src="js/spatial.js?v=42"></script>
+<script src="js/view.js?v=42"></script>
+<script src="js/renderer.js?v=42"></script>
+<script src="js/levels.js?v=42"></script>
+<script src="js/storage.js?v=42"></script>
+<script src="js/sound.js?v=42"></script>
+<script src="js/study.js?v=42"></script>
+<script src="js/game.js?v=42"></script>
+<script src="js/hoodgame.js?v=42"></script>
+<script src="js/featgame.js?v=42"></script>
+<script src="js/ui.js?v=42"></script>
+<script src="js/main.js?v=42"></script>
 </body>
 </html>

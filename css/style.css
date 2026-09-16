@@ -271,6 +271,11 @@ h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em;
 }
 #settings-pop .btn { margin-top: 3px; }
 
+/* category submenus */
+.sub-head { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+.sub-head h1 { margin: 0; }
+.level-card.folder .lv-name::after { content: " »"; color: var(--text-faint); }
+
 #attribution {
   position: fixed;
   right: 8px;

@@ -18,6 +18,10 @@
     pending: 0
   };
 
+  // Sub-levels (one novads' pagasti): clicks outside the level are inert,
+  // like ocean clicks — the rest of the country is grayed out anyway
+  var levelIds = null;
+
   function shuffle(arr) {
     for (var i = arr.length - 1; i > 0; i--) {
       var j = Math.floor(Math.random() * (i + 1));
@@ -39,6 +43,7 @@
   function hoodAt(wx, wy) {
     var hits = App.geom.hoodsAt(App.data.hoods, wx, wy, App.geom.cityPickTol());
     for (var i = 0; i < hits.length; i++) {
+      if (levelIds && !levelIds.has(hits[i])) continue;
       if (!game.colors.has(hits[i])) return hits[i];
     }
     return -1;
@@ -165,8 +170,11 @@
     game.points = 0;
     game.phase = "await";
     game.colors = new Map();
+    levelIds = level.sub ? new Set(level.ids) : null;
 
     var cfg = App.renderer.config;
+    cfg.focusIds = levelIds;
+    cfg.focusRings = level.focusRings || null;
     cfg.inLevel = new Set(); // empty: every street draws as dimmed backdrop
     cfg.activeHood = -1;
     cfg.colorOf = null;
@@ -197,9 +205,12 @@
     game.active = false;
     clearInterval(game.timerId);
     clearTimeout(game.pending);
+    levelIds = null;
     var cfg = App.renderer.config;
     cfg.hoodQuiz = false;
     cfg.hoodColorOf = null;
+    cfg.focusIds = null;
+    cfg.focusRings = null;
     App.renderer.guide = null;
     App.renderer.setGuideHover(false);
     App.renderer.revealLabel = null;

@@ -132,7 +132,24 @@ NAME pattern with relations preferred over same-named ways: Slītere NP
 is a boundary way, and legacy core-zone rezervāts polygons inside the
 NPs sit in `NATURE_EXCLUDE`), `regions` (the 5 kultūrvēsturiskās zemes:
 `boundary=traditional` relations — NOT the same-named statistical
-regions or villages). Decor `water` = every named body over
+regions or villages), and `pagasti` — the full 593-piece second-level
+mosaic (admin_level=8 parishes + level-7 towns/titular cities, with the
+7 state cities REBUILT at `PAGASTS_TOL` so every border shares one
+cache and tiles crack-free; each entry carries its parent novads id
+`nov` for the per-municipality levels, duplicate pagasts names get the
+parent appended, towns are `city`-flagged for magnetic picks). It plays
+through hoodgame on a virtual dataset clone (`Object.assign({}, lv,
+{hoods: lv.pagasti})` in levels.js) — one marathon card plus a
+searchable per-novads section. Menu: the per-novads levels ("Pagasti", folder card in the Latvia row)
+and ALL Riga street modes ("Riga streets" folder card in the Citywide
+row: majors + whole city + 58 per-hood levels) open as SUBMENU pages
+(`setCategory` in ui.js: #menu-root swaps for #menu-sub with a Back
+button, title and the search box; Escape goes back; the open category
+survives a game round-trip). Pinned top cards stay outside the filters.
+Sub-levels (`level.sub` + `focusRings`) run in FOCUS mode: hoodgame
+restricts picks to `level.ids` (outside clicks are inert), the renderer
+grays non-members (`cfg.focusIds`, alpha 0.35 + faint borders) and
+strokes the municipality outline (`cfg.focusRings`). Decor `water` = every named body over
 `MIN_WATER_AREA`. Feature
 quizzes share ONE hover+click radius and one `pickAt` resolution (hover
 shows exactly what a click selects; the asked target wins ties/overlaps but

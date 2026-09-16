@@ -28,6 +28,8 @@
     cfg.hoodColorOf = null;
     cfg.shadeHoods = false;
     cfg.majorsOnly = false;
+    cfg.focusIds = null;
+    cfg.focusRings = null;
     App.useDataset(rigaData);
     App.view.onClick = null;
     App.view.onHover = null;
@@ -51,6 +53,7 @@
   var ENGINE_BY_KIND = {
     hoods: App.hoodgame,
     latvia: App.hoodgame,
+    lvpagasti: App.hoodgame,
     lvcities: App.lvCityGame,
     lvcities5k: App.lvCityGame5k,
     lvcitiesall: App.lvCityGameAll,
@@ -166,7 +169,10 @@
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape") {
         if (!pop.classList.contains("hidden")) { pop.classList.add("hidden"); return; }
-        if (!document.getElementById("menu").classList.contains("hidden")) return;
+        if (!document.getElementById("menu").classList.contains("hidden")) {
+          App.ui.menuBack(); // category submenu -> back to the main menu
+          return;
+        }
         App.showMenu();
       } else if (e.key === "s" || e.key === "S") {
         if (e.target && e.target.tagName === "INPUT") return;

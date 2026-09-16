@@ -30,7 +30,8 @@ import re
 import sys
 from pathlib import Path
 
-from geo import simplify, round_pts, bbox_of, bbox_union, ring_area, stitch_rings
+from geo import (simplify, round_pts, bbox_of, bbox_union, ring_area,
+                 point_in_ring, stitch_rings)
 
 BASE = Path(__file__).resolve().parent.parent
 RAW_DIR = BASE / "data" / "raw"
@@ -184,6 +185,7 @@ def main():
     castles_raw = load("latvia_castles")
     nature_raw = load("latvia_nature")
     regions_raw = load("latvia_regions")
+    pagasti_raw = load("latvia_pagasti")
 
     # Projection origin over ALL geometry so every coordinate is positive
     # (ways crossing the border carry their full course, past Latvia).
@@ -672,6 +674,100 @@ def main():
     if len(regions) != 5:
         sys.exit("FATAL: expected the 5 historical lands")
 
+    # --- the full second-level mosaic: pagasti + towns + state cities ---
+    # Its own per-way cache at a coarser tolerance (593 territories would
+    # weigh megabytes at UNIT_TOL); the 7 state cities are REBUILT from
+    # this cache so their borders tile crack-free with adjacent pagasti.
+    PAGASTS_TOL = 150.0
+    pag_cache = {}
+
+    def pag_way_pts(member):
+        ref = member["ref"]
+        if ref not in pag_cache:
+            pag_cache[ref] = round_pts(simplify(project(member["geometry"]),
+                                                PAGASTS_TOL))
+        return pag_cache[ref]
+
+    def pag_rings(el):
+        members = [m for m in el.get("members", [])
+                   if m.get("type") == "way" and m.get("geometry")]
+        outers = [pag_way_pts(m) for m in members
+                  if m.get("role") in ("outer", "")]
+        inners = [pag_way_pts(m) for m in members if m.get("role") == "inner"]
+        orings, lo = stitch_rings(outers, STITCH_TOL)
+        irings, li = stitch_rings(inners, STITCH_TOL)
+        if not orings or lo or li:
+            return None
+        return [r for r in orings + irings if len(r) >= 4]
+
+    def outer_pip(x, y, unit):
+        # outer ring only: the carved titular cities sit in HOLES of their
+        # parent novads in the first-level set, but still belong to it here
+        ring = max(unit["rings"], key=lambda r: abs(ring_area(r)))
+        return point_in_ring(x, y, ring)
+
+    pagasti = []
+    pag_failed = []
+    pag_sources = ([e for e in pagasti_raw["elements"] if e["type"] == "relation"]
+                   + [e for e in admin_raw["elements"]
+                      if e["type"] == "relation"
+                      and e.get("tags", {}).get("border_type") == "city"])
+    for el in pag_sources:
+        tags = el.get("tags", {})
+        name = tags.get("name", f"rel {el['id']}")
+        rings = pag_rings(el)
+        if rings is None:
+            pag_failed.append(name)
+            continue
+        item = {"name": name, "rings": rings,
+                "bbox": bbox_of([p for r in rings for p in r])}
+        if tags.get("admin_level") != "8":
+            item["city"] = 1  # towns and cities: dot-small, magnetic picks
+        if tags.get("admin_level") == "5":
+            item["nov"] = -1  # state cities stand alone in the per-novads split
+        else:
+            cx = sum(p[0] for p in rings[0]) / len(rings[0])
+            cy = sum(p[1] for p in rings[0]) / len(rings[0])
+            item["nov"] = next((u["id"] for u in units
+                                if not u.get("city") and outer_pip(cx, cy, u)), -1)
+            if item["nov"] < 0:
+                # concave frontier pagasti (Goliševa, Kaplava) can put the
+                # centroid outside every ring — fall back to bbox overlap
+                def overlap(u):
+                    a, b = item["bbox"], u["bbox"]
+                    return (max(0, min(a[2], b[2]) - max(a[0], b[0]))
+                            * max(0, min(a[3], b[3]) - max(a[1], b[1])))
+                cand = max((u for u in units if not u.get("city")), key=overlap)
+                if overlap(cand) > 0:
+                    item["nov"] = cand["id"]
+        pagasti.append(item)
+    if pag_failed:
+        print(f"  note: {len(pag_failed)} second-level units skipped "
+              f"(unclosed rings): {pag_failed[:6]}")
+    if len(pag_failed) > 10:
+        sys.exit("FATAL: too many broken pagasti relations")
+    # duplicate pagasts names exist across novadi — disambiguate with the
+    # parent so marathon prompts stay unique
+    name_count = {}
+    for it in pagasti:
+        name_count[it["name"]] = name_count.get(it["name"], 0) + 1
+    unit_name = {u["id"]: u["name"] for u in units}
+    for it in pagasti:
+        if name_count[it["name"]] > 1 and it["nov"] >= 0:
+            it["name"] += " (" + unit_name[it["nov"]] + ")"
+    pagasti.sort(key=lambda p: lv_key(p["name"]))
+    for i, it in enumerate(pagasti):
+        it["id"] = i
+    n_lone = sum(1 for it in pagasti if it["nov"] < 0)
+    n_dupes = sum(1 for n, c in name_count.items() if c > 1)
+    print(f"pagasti mosaic: {len(pagasti)} territories "
+          f"({n_lone} standalone incl. the 7 state cities, "
+          f"{n_dupes} duplicated names disambiguated)")
+    if not 500 <= len(pagasti) <= 650:
+        print("WARNING: expected ~593 second-level territories")
+    if n_lone > 12:
+        print(f"WARNING: {n_lone} territories got no parent novads")
+
     # --- emit ---
     all_bb = units[0]["bbox"]
     for u in units[1:]:
@@ -693,6 +789,7 @@ def main():
         "castles": castles,
         "nature": nature,
         "regions": regions,
+        "pagasti": pagasti,
         "land": 1,
     }
     js = "window.LATVIA_DATA=" + json.dumps(out, ensure_ascii=False,
@@ -700,9 +797,9 @@ def main():
     OUT_PATH.write_text(js, encoding="utf-8")
     size = OUT_PATH.stat().st_size
     print(f"wrote {OUT_PATH} ({size / 1e6:.2f} MB)")
-    if size > 900_000:
-        print("WARNING: over the ~900 KB budget — raise RIVER_TOL/ROAD_TOL "
-              "or lower MIN_WATER_AREA generosity")
+    if size > 1_500_000:
+        print("WARNING: over the ~1.5 MB budget — raise PAGASTS_TOL/"
+              "RIVER_TOL or lower MIN_WATER_AREA generosity")
 
 
 if __name__ == "__main__":
