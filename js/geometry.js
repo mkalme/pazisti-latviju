@@ -95,9 +95,26 @@
       cy += (best[k][1] + best[k + 1][1]) * cross;
     }
     area *= 0.5;
-    hood._anchor = area === 0
+    var a = area === 0
       ? [(hood.bbox[0] + hood.bbox[2]) / 2, (hood.bbox[1] + hood.bbox[3]) / 2]
       : [cx / (6 * area), cy / (6 * area)];
+    // Concave shapes (C-shaped towns like Ādaži) can put the shoelace
+    // centroid OUTSIDE the polygon — labels and reveal pulses would sit
+    // on a neighbor. Snap to the interior grid point nearest the centroid.
+    if (!pointInRings(hood.rings, a[0], a[1])) {
+      var b = hood.bbox, best = null, bd = Infinity, n = 15;
+      for (var gi = 0; gi < n; gi++) {
+        for (var gj = 0; gj < n; gj++) {
+          var gx = b[0] + (b[2] - b[0]) * (gi + 0.5) / n;
+          var gy = b[1] + (b[3] - b[1]) * (gj + 0.5) / n;
+          if (!pointInRings(hood.rings, gx, gy)) continue;
+          var d = (gx - a[0]) * (gx - a[0]) + (gy - a[1]) * (gy - a[1]);
+          if (d < bd) { bd = d; best = [gx, gy]; }
+        }
+      }
+      if (best) a = best;
+    }
+    hood._anchor = a;
     return hood._anchor;
   }
 

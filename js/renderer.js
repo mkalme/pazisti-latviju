@@ -83,7 +83,8 @@
       shadeHoods: false,    // study-mode pastel shading
       majorsOnly: false,    // study-mode filter
       focusIds: null,       // Set: sub-level members; everything else grays
-      focusRings: null      // the containing municipality's outline
+      focusRings: null,     // the containing municipality's outline
+      focusNov: null        // its unit id (skipped in the context borders)
     }
   };
   renderer.COLORS = COLORS;
@@ -177,7 +178,7 @@
         hood = data.hoods[h];
         if (!App.geom.bboxIntersects(hood.bbox, cull)) continue;
         // sub-level focus: territories outside the level fade toward bg
-        ctx.globalAlpha = cfg.focusIds && !cfg.focusIds.has(hood.id) ? 0.35 : 1;
+        ctx.globalAlpha = cfg.focusIds && !cfg.focusIds.has(hood.id) ? 0.18 : 1;
         ctx.beginPath();
         traceRings(ctx, hood.rings, bview);
         ctx.fill("evenodd");
@@ -246,10 +247,13 @@
     ctx.lineWidth = data.land ? 1.25 / res : cfg.hoodQuiz ? 2 : 1;
     ctx.stroke();
     if (cfg.focusIds) {
+      // context: only whole MUNICIPALITY outlines outside the level —
+      // their internal pagasti stay hidden
+      var uts = data.units || [];
       ctx.beginPath();
-      for (h = 0; h < data.hoods.length; h++) {
-        hood = data.hoods[h];
-        if (cfg.focusIds.has(hood.id)
+      for (h = 0; h < uts.length; h++) {
+        hood = uts[h];
+        if (hood.id === cfg.focusNov
             || !App.geom.bboxIntersects(hood.bbox, cull)) continue;
         traceRings(ctx, hood.rings, bview);
       }
@@ -258,11 +262,11 @@
       ctx.stroke();
     }
     if (cfg.focusRings) {
-      // the containing municipality, highlighted
+      // the played municipality's outer border, same neutral line style
       ctx.beginPath();
       traceRings(ctx, cfg.focusRings, bview);
-      ctx.strokeStyle = COLORS.activeHoodLine;
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = COLORS.landLine;
+      ctx.lineWidth = 1.25 / res;
       ctx.stroke();
     }
     if (cfg.activeHood >= 0) {

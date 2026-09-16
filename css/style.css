@@ -129,7 +129,7 @@ h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em;
 .lv-meta { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
 .lv-best { color: var(--gold); font-weight: 600; }
 
-#hood-search {
+#hood-search, #pag-search {
   width: 100%;
   font: inherit;
   padding: 8px 12px;
@@ -139,11 +139,11 @@ h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em;
   color: var(--text);
   margin-bottom: 10px;
 }
-#hood-search:focus {
+#hood-search:focus, #pag-search:focus {
   outline: 2px solid var(--accent-border);
   outline-offset: -1px;
 }
-#hood-search::placeholder { color: var(--text-faint); }
+#hood-search::placeholder, #pag-search::placeholder { color: var(--text-faint); }
 .hood-none { color: var(--text-faint); font-size: 13px; padding: 2px 0 10px; }
 
 /* --- buttons --- */
@@ -190,6 +190,8 @@ h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em;
 #prompt b { font-size: 18px; }
 #prompt-hint { color: var(--text-faint); font-size: 13px; }
 .hud-stat { font-variant-numeric: tabular-nums; color: var(--text-dim); font-size: 15px; }
+.hud-level { font-size: 13px; color: var(--text-faint); max-width: 170px;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hud-title { flex: 1; font-size: 14px; color: var(--text-dim); min-width: 200px; }
 
 .toggle { font-size: 13px; color: var(--text); display: flex; gap: 5px; align-items: center;

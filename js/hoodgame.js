@@ -175,6 +175,7 @@
     var cfg = App.renderer.config;
     cfg.focusIds = levelIds;
     cfg.focusRings = level.focusRings || null;
+    cfg.focusNov = level.sub ? level.novId : null;
     cfg.inLevel = new Set(); // empty: every street draws as dimmed backdrop
     cfg.activeHood = -1;
     cfg.colorOf = null;
@@ -211,6 +212,7 @@
     cfg.hoodColorOf = null;
     cfg.focusIds = null;
     cfg.focusRings = null;
+    cfg.focusNov = null;
     App.renderer.guide = null;
     App.renderer.setGuideHover(false);
     App.renderer.revealLabel = null;

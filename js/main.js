@@ -30,6 +30,7 @@
     cfg.majorsOnly = false;
     cfg.focusIds = null;
     cfg.focusRings = null;
+    cfg.focusNov = null;
     App.useDataset(rigaData);
     App.view.onClick = null;
     App.view.onHover = null;
@@ -75,6 +76,7 @@
     engines().forEach(function (e) { e.stop(); });
     App.useDataset(level.ds || rigaData);
     App.ui.showScreen("game");
+    App.ui.setLevelName(level.name);
     (ENGINE_BY_KIND[level.kind] || App.game).start(level);
   };
 

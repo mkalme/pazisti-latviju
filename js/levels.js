@@ -98,7 +98,8 @@
       // Second-level mosaic: one marathon card + a per-novads section,
       // all sharing a virtual dataset whose hoods ARE the pagasti
       if (lv.pagasti && lv.pagasti.length) {
-        var lvp = Object.assign({}, lv, { hoods: lv.pagasti });
+        // clone keeps the first-level units reachable for thumbnails
+        var lvp = Object.assign({}, lv, { hoods: lv.pagasti, units: lv.hoods });
         // the marathon heads its own category, above the per-novads levels
         pagLevels.push({ id: "lv:pagasti", kind: "lvpagasti",
           name: "All pagasti & cities",
@@ -114,10 +115,18 @@
         lv.hoods.forEach(function (u) {
           var ids = perNov.get(u.id);
           if (!ids || ids.length < 2) return;
+          // a member state city (Rīga, Rēzekne, ...) can stick out past
+          // the municipality — the level view must cover it too
+          var bb = u.bbox.slice();
+          ids.forEach(function (id) {
+            var b = lv.pagasti[id].bbox;
+            bb[0] = Math.min(bb[0], b[0]); bb[1] = Math.min(bb[1], b[1]);
+            bb[2] = Math.max(bb[2], b[2]); bb[3] = Math.max(bb[3], b[3]);
+          });
           pagLevels.push({ id: "lv:pag:" + u.id, kind: "lvpagasti",
             name: u.name, note: "click the territory", hoodId: -1,
-            ids: ids, itemCount: ids.length, bbox: u.bbox, ds: lvp,
-            sub: 1, focusRings: u.rings });
+            ids: ids, itemCount: ids.length, bbox: bb, ds: lvp,
+            sub: 1, novId: u.id, focusRings: u.rings });
         });
       }
       // Countrywide feature quizzes, one card per dataset key

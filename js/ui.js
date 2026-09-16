@@ -135,9 +135,25 @@
     var t = thumbTransform(THUMB, data);
     var C = App.renderer.COLORS;
     if (level.ds && level.sub) {
-      // Per-novads card: a mini-map fitted to the municipality, showing
-      // only its own territories as a pastel mosaic
-      t = thumbTransform(THUMB, data, level.bbox);
+      // Per-novads card: the municipality's mosaic in a slightly expanded
+      // view — surrounding territories appear as EMPTY land for context
+      var bb = level.bbox;
+      var pad = 0.18 * Math.max(bb[2] - bb[0], bb[3] - bb[1]);
+      var ebb = [bb[0] - pad, bb[1] - pad, bb[2] + pad, bb[3] + pad];
+      t = thumbTransform(THUMB, data, ebb);
+      // neighbors as WHOLE municipalities — no pagasti subdivision
+      ctx.globalAlpha = 0.3;
+      (data.units || []).forEach(function (u) {
+        if (u.id === level.novId || !App.geom.bboxIntersects(u.bbox, ebb)) return;
+        ctx.beginPath();
+        traceRingsT(ctx, u.rings, t);
+        ctx.fillStyle = C.thumbBase;
+        ctx.fill("evenodd");
+        ctx.strokeStyle = C.hoodLine;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      });
+      ctx.globalAlpha = 1;
       level.ids.forEach(function (id) {
         var u = data.hoods[id];
         ctx.beginPath();
@@ -407,26 +423,43 @@
         pagLevels.length, pagLevels[0], "pagasti", dpr));
     }
     els.menuPagasti.innerHTML = "";
+    els.menuPagastiTop.innerHTML = "";
     pagCards = [];
     pagLevels.forEach(function (l) {
       var card = levelCard(l, dpr, theme);
-      els.menuPagasti.appendChild(card);
-      // the marathon stays pinned; per-novads cards join the filter
-      if (l.sub) pagCards.push({ el: card, key: searchKey(l.name) });
+      // the marathon stays pinned above the search bar; per-novads cards
+      // sit below it and join the filter
+      if (l.sub) {
+        els.menuPagasti.appendChild(card);
+        pagCards.push({ el: card, key: searchKey(l.name) });
+      } else {
+        els.menuPagastiTop.appendChild(card);
+      }
     });
     applyPagFilter();
     setCategory(pagLevels.length || currentCat !== "pagasti" ? currentCat : null);
+    els.menuStreetsTop.innerHTML = "";
     levels.streets.forEach(function (l) {
       var card = levelCard(l, dpr, theme);
-      els.menuHoods.appendChild(card);
-      // only the per-neighborhood levels take part in the search filter;
-      // Majors/Whole city stay pinned at the top of the category
-      if (l.hoodId >= 0) hoodCards.push({ el: card, key: searchKey(l.name) });
+      // per-neighborhood levels sit below the search bar and take part in
+      // the filter; Majors/Whole city stay pinned in the top row above it
+      if (l.hoodId >= 0) {
+        els.menuHoods.appendChild(card);
+        hoodCards.push({ el: card, key: searchKey(l.name) });
+      } else {
+        els.menuStreetsTop.appendChild(card);
+      }
     });
     applyHoodFilter();
   }
 
   /* --- HUD --- */
+
+  function setLevelName(name) {
+    var el = $("level-name");
+    el.textContent = name;
+    el.title = name; // full name on hover when ellipsized
+  }
 
   function setPrompt(item) {
     els.promptName.textContent = item.name;
@@ -533,6 +566,8 @@
     els.menuTransport = $("menu-transport");
     els.menuLatvia = $("menu-latvia");
     els.menuPagasti = $("menu-pagasti");
+    els.menuPagastiTop = $("menu-pagasti-top");
+    els.menuStreetsTop = $("menu-streets-top");
     els.pagSearch = $("pag-search");
     els.pagNone = $("pag-none");
     els.menuHoods = $("menu-hoods");
@@ -593,6 +628,7 @@
     },
     buildMenu: buildMenu,
     setPrompt: setPrompt,
+    setLevelName: setLevelName,
     promptFeedback: promptFeedback,
     setProgress: setProgress,
     setTimer: setTimer,

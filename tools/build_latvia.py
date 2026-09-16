@@ -30,8 +30,8 @@ import re
 import sys
 from pathlib import Path
 
-from geo import (simplify, round_pts, bbox_of, bbox_union, ring_area,
-                 point_in_ring, stitch_rings)
+from geo import (simplify, round_pts, bbox_of, bbox_union, bbox_overlap,
+                 ring_area, point_in_ring, stitch_rings)
 
 BASE = Path(__file__).resolve().parent.parent
 RAW_DIR = BASE / "data" / "raw"
@@ -678,14 +678,37 @@ def main():
     # Its own per-way cache at a coarser tolerance (593 territories would
     # weigh megabytes at UNIT_TOL); the 7 state cities are REBUILT from
     # this cache so their borders tile crack-free with adjacent pagasti.
-    PAGASTS_TOL = 150.0
+    PAGASTS_TOL = 100.0     # cap: even the big Latgale pagasti stay decent
+    PAGASTS_MIN_TOL = 25.0  # floor: small Pierīga pagasti keep real shape
+    pag_sources = ([e for e in pagasti_raw["elements"] if e["type"] == "relation"]
+                   + [e for e in admin_raw["elements"]
+                      if e["type"] == "relation"
+                      and e.get("tags", {}).get("border_type") == "city"])
+    # ADAPTIVE tolerance: each way simplifies for the SMALLEST territory
+    # it borders — per-novads levels zoom deep into small units, where a
+    # flat 150 m looks chunky. One cache still keeps shared borders
+    # bit-identical, so the mosaic stays crack-free.
+    way_min_size = {}
+    for el in pag_sources:
+        lons = [pt["lon"] for m in el.get("members", [])
+                for pt in m.get("geometry") or []]
+        lats = [pt["lat"] for m in el.get("members", [])
+                for pt in m.get("geometry") or []]
+        if not lons:
+            continue
+        size = ((max(lons) - min(lons)) * K_X + (max(lats) - min(lats)) * K_Y)
+        for m in el.get("members", []):
+            if m.get("type") == "way" and m.get("geometry"):
+                ref = m["ref"]
+                way_min_size[ref] = min(way_min_size.get(ref, 1e18), size)
     pag_cache = {}
 
     def pag_way_pts(member):
         ref = member["ref"]
         if ref not in pag_cache:
-            pag_cache[ref] = round_pts(simplify(project(member["geometry"]),
-                                                PAGASTS_TOL))
+            tol = min(PAGASTS_TOL,
+                      max(PAGASTS_MIN_TOL, way_min_size.get(ref, 1e18) / 300))
+            pag_cache[ref] = round_pts(simplify(project(member["geometry"]), tol))
         return pag_cache[ref]
 
     def pag_rings(el):
@@ -700,18 +723,38 @@ def main():
             return None
         return [r for r in orings + irings if len(r) >= 4]
 
-    def outer_pip(x, y, unit):
-        # outer ring only: the carved titular cities sit in HOLES of their
-        # parent novads in the first-level set, but still belong to it here
-        ring = max(unit["rings"], key=lambda r: abs(ring_area(r)))
-        return point_in_ring(x, y, ring)
+    def inside_evenodd(x, y, rings):
+        return sum(point_in_ring(x, y, r) for r in rings) % 2 == 1
+
+    def grid_inside(item, n=13):
+        b = item["bbox"]
+        pts = []
+        for i in range(n):
+            for j in range(n):
+                x = b[0] + (b[2] - b[0]) * (i + 0.5) / n
+                y = b[1] + (b[3] - b[1]) * (j + 0.5) / n
+                if inside_evenodd(x, y, item["rings"]):
+                    pts.append((x, y))
+        return pts
+
+    def assign_parent(item):
+        """The novads whose OUTER ring holds most of the item's area.
+        Interior samples are area-true — a vertex-mean 'centroid' is
+        density-biased and once dropped Olaines pagasts into Ķekavas
+        novads. Outer-ring test so enclave holes don't repel members."""
+        samples = grid_inside(item)
+        best_id, best_k = -1, 0
+        for u in units:
+            if u.get("city") or not bbox_overlap(item["bbox"], u["bbox"]):
+                continue
+            ring = max(u["rings"], key=lambda r: abs(ring_area(r)))
+            k = sum(1 for (x, y) in samples if point_in_ring(x, y, ring))
+            if k > best_k:
+                best_k, best_id = k, u["id"]
+        return best_id
 
     pagasti = []
     pag_failed = []
-    pag_sources = ([e for e in pagasti_raw["elements"] if e["type"] == "relation"]
-                   + [e for e in admin_raw["elements"]
-                      if e["type"] == "relation"
-                      and e.get("tags", {}).get("border_type") == "city"])
     for el in pag_sources:
         tags = el.get("tags", {})
         name = tags.get("name", f"rel {el['id']}")
@@ -724,28 +767,98 @@ def main():
         if tags.get("admin_level") != "8":
             item["city"] = 1  # towns and cities: dot-small, magnetic picks
         if tags.get("admin_level") == "5":
-            item["nov"] = -1  # state cities stand alone in the per-novads split
+            item["nov"] = -2  # state city: assigned by shared border below
+            item["_refs"] = [m["ref"] for m in el.get("members", [])
+                             if m.get("type") == "way" and m.get("geometry")]
         else:
-            cx = sum(p[0] for p in rings[0]) / len(rings[0])
-            cy = sum(p[1] for p in rings[0]) / len(rings[0])
-            item["nov"] = next((u["id"] for u in units
-                                if not u.get("city") and outer_pip(cx, cy, u)), -1)
-            if item["nov"] < 0:
-                # concave frontier pagasti (Goliševa, Kaplava) can put the
-                # centroid outside every ring — fall back to bbox overlap
-                def overlap(u):
-                    a, b = item["bbox"], u["bbox"]
-                    return (max(0, min(a[2], b[2]) - max(a[0], b[0]))
-                            * max(0, min(a[3], b[3]) - max(a[1], b[1])))
-                cand = max((u for u in units if not u.get("city")), key=overlap)
-                if overlap(cand) > 0:
-                    item["nov"] = cand["id"]
+            item["nov"] = assign_parent(item)
         pagasti.append(item)
     if pag_failed:
         print(f"  note: {len(pag_failed)} second-level units skipped "
               f"(unclosed rings): {pag_failed[:6]}")
     if len(pag_failed) > 10:
         sys.exit("FATAL: too many broken pagasti relations")
+    # State cities join the per-novads level of the municipality they
+    # share the LONGEST border with — namesakes and enclaves fall out
+    # naturally (Rēzekne -> Rēzeknes novads), and Rīga/Jūrmala get a
+    # principled Pierīga home. Border length is summed over shared ways.
+    way_len = {}
+    nov_refs = {}
+    unit_id_by_name = {u["name"]: u["id"] for u in units}
+    for el in admin_raw["elements"]:
+        if el["type"] != "relation":
+            continue
+        name = el.get("tags", {}).get("name", "")
+        is_city = el.get("tags", {}).get("border_type") == "city"
+        refs = []
+        for m in el.get("members", []):
+            if m.get("type") != "way" or not m.get("geometry"):
+                continue
+            refs.append(m["ref"])
+            if m["ref"] not in way_len:
+                g = project(m["geometry"])
+                way_len[m["ref"]] = _len(g)
+        if not is_city and name in unit_id_by_name:
+            nov_refs[unit_id_by_name[name]] = set(refs)
+    for it in pagasti:
+        if it["nov"] != -2:
+            continue
+        best_id, best_len = -1, 0.0
+        crefs = set(it.pop("_refs", []))
+        for nid, refs in nov_refs.items():
+            shared = sum(way_len.get(r, 0.0) for r in crefs & refs)
+            if shared > best_len:
+                best_len, best_id = shared, nid
+        it["nov"] = best_id
+        print(f"  state city {it['name']} -> "
+              f"{[u['name'] for u in units if u['id'] == best_id][0] if best_id >= 0 else 'none'}")
+    # OSM does not always exclude a town from its pagasts polygon
+    # (Carnikava sits wholly inside Carnikavas pagasts; Ādaži overlaps
+    # Ādažu pagasts only partially, so bbox containment is NOT a reliable
+    # test). Measure the actual overlap with a deterministic interior
+    # sample grid and punch any majority-overlapped town into its
+    # dominant host as an even-odd hole — then AUDIT what remains, so
+    # future data drift fails loudly at build time.
+    def overlap_frac(samples, host):
+        if not samples:
+            return 0.0
+        return (sum(1 for (x, y) in samples
+                    if inside_evenodd(x, y, host["rings"])) / len(samples))
+
+    carved_towns = []
+    town_samples = {}
+    for t in pagasti:
+        if not t.get("city"):
+            continue
+        samples = grid_inside(t)
+        town_samples[t["name"]] = samples
+        best_host, best_frac = None, 0.0
+        for host in pagasti:
+            if host.get("city") or host is t \
+                    or not bbox_overlap(t["bbox"], host["bbox"]):
+                continue
+            frac = overlap_frac(samples, host)
+            if frac > best_frac:
+                best_frac, best_host = frac, host
+        if best_host is not None and best_frac >= 0.5:
+            best_host["rings"] = best_host["rings"] + t["rings"]
+            carved_towns.append(f"{t['name']} ({best_frac:.0%} in {best_host['name']})")
+    if carved_towns:
+        print(f"  carved {len(carved_towns)} overlapping town(s): "
+              + "; ".join(carved_towns))
+    leftovers = []
+    for t in pagasti:
+        if not t.get("city"):
+            continue
+        for host in pagasti:
+            if host.get("city") or host is t \
+                    or not bbox_overlap(t["bbox"], host["bbox"]):
+                continue
+            frac = overlap_frac(town_samples[t["name"]], host)
+            if frac >= 0.1:
+                leftovers.append(f"{t['name']} ~{frac:.0%} inside {host['name']}")
+    if leftovers:
+        print(f"WARNING: unresolved town/pagasts overlaps: {leftovers}")
     # duplicate pagasts names exist across novadi — disambiguate with the
     # parent so marathon prompts stay unique
     name_count = {}
@@ -763,6 +876,14 @@ def main():
     print(f"pagasti mosaic: {len(pagasti)} territories "
           f"({n_lone} standalone incl. the 7 state cities, "
           f"{n_dupes} duplicated names disambiguated)")
+    per_nov = {}
+    for it in pagasti:
+        per_nov[it["nov"]] = per_nov.get(it["nov"], 0) + 1
+    thin = [u["name"] for u in units
+            if not u.get("city") and per_nov.get(u["id"], 0) < 2]
+    if thin:
+        print(f"WARNING: municipalities with under 2 assigned territories "
+              f"(no per-novads level): {thin}")
     if not 500 <= len(pagasti) <= 650:
         print("WARNING: expected ~593 second-level territories")
     if n_lone > 12:
@@ -797,8 +918,8 @@ def main():
     OUT_PATH.write_text(js, encoding="utf-8")
     size = OUT_PATH.stat().st_size
     print(f"wrote {OUT_PATH} ({size / 1e6:.2f} MB)")
-    if size > 1_500_000:
-        print("WARNING: over the ~1.5 MB budget — raise PAGASTS_TOL/"
+    if size > 2_200_000:
+        print("WARNING: over the ~2.2 MB budget — raise PAGASTS_TOL/"
               "RIVER_TOL or lower MIN_WATER_AREA generosity")
 
 

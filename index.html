@@ -12,7 +12,7 @@ try {
   if (t) document.documentElement.dataset.theme = t;
 } catch (e) {}
 </script>
-<link rel="stylesheet" href="css/style.css?v=42">
+<link rel="stylesheet" href="css/style.css?v=53">
 </head>
 <body>
 
@@ -48,12 +48,14 @@ python3 tools/build_data.py</pre>
         <h1 id="sub-title"></h1>
       </div>
       <div id="sub-pagasti" class="hidden">
+        <div id="menu-pagasti-top" class="level-list"></div>
         <input id="pag-search" type="search" placeholder="Search municipalities…"
                autocomplete="off" spellcheck="false">
         <div id="pag-none" class="hood-none hidden">No municipality matches</div>
         <div id="menu-pagasti" class="level-list"></div>
       </div>
       <div id="sub-streets" class="hidden">
+        <div id="menu-streets-top" class="level-list"></div>
         <input id="hood-search" type="search" placeholder="Search neighborhoods…"
                autocomplete="off" spellcheck="false">
         <div id="hood-none" class="hood-none hidden">No neighborhood matches</div>
@@ -66,6 +68,7 @@ python3 tools/build_data.py</pre>
 <div id="hud" class="hidden">
   <div class="hud-bar">
     <button id="btn-quit" class="btn btn-small">‹ Menu</button>
+    <div id="level-name" class="hud-level"></div>
     <div id="prompt">Click: <b id="prompt-name"></b> <span id="prompt-hint"></span></div>
     <div id="progress" class="hud-stat"></div>
     <div id="timer" class="hud-stat"></div>
@@ -120,20 +123,20 @@ python3 tools/build_data.py</pre>
 <div id="attribution">Map data © <a href="https://www.openstreetmap.org/copyright"
   target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
 
-<script src="data/riga_data.js?v=42"></script>
-<script src="data/latvia_data.js?v=42"></script>
-<script src="js/geometry.js?v=42"></script>
-<script src="js/spatial.js?v=42"></script>
-<script src="js/view.js?v=42"></script>
-<script src="js/renderer.js?v=42"></script>
-<script src="js/levels.js?v=42"></script>
-<script src="js/storage.js?v=42"></script>
-<script src="js/sound.js?v=42"></script>
-<script src="js/study.js?v=42"></script>
-<script src="js/game.js?v=42"></script>
-<script src="js/hoodgame.js?v=42"></script>
-<script src="js/featgame.js?v=42"></script>
-<script src="js/ui.js?v=42"></script>
-<script src="js/main.js?v=42"></script>
+<script src="data/riga_data.js?v=53"></script>
+<script src="data/latvia_data.js?v=53"></script>
+<script src="js/geometry.js?v=53"></script>
+<script src="js/spatial.js?v=53"></script>
+<script src="js/view.js?v=53"></script>
+<script src="js/renderer.js?v=53"></script>
+<script src="js/levels.js?v=53"></script>
+<script src="js/storage.js?v=53"></script>
+<script src="js/sound.js?v=53"></script>
+<script src="js/study.js?v=53"></script>
+<script src="js/game.js?v=53"></script>
+<script src="js/hoodgame.js?v=53"></script>
+<script src="js/featgame.js?v=53"></script>
+<script src="js/ui.js?v=53"></script>
+<script src="js/main.js?v=53"></script>
 </body>
 </html>
