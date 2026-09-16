@@ -7,7 +7,7 @@ from pathlib import Path
 import os
 
 os.chdir(Path(__file__).resolve().parent.parent)
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8747
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("PORT", 8747))
 
 
 class Handler(SimpleHTTPRequestHandler):

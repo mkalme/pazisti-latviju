@@ -40,7 +40,9 @@
 
   function engines() {
     return [App.game, App.hoodgame, App.bridgegame, App.parkgame,
-            App.lvCityGame, App.lvCityGame5k]
+            App.lvCityGame, App.lvCityGame5k, App.lvCityGameAll,
+            App.lvRiverGame, App.lvLakeGame,
+            App.lvRoadGame, App.lvCastleGame, App.lvNatureGame, App.lvRegionGame]
       .concat(Object.keys(App.transitGames).map(function (k) {
         return App.transitGames[k];
       }));
@@ -51,6 +53,13 @@
     latvia: App.hoodgame,
     lvcities: App.lvCityGame,
     lvcities5k: App.lvCityGame5k,
+    lvcitiesall: App.lvCityGameAll,
+    lvrivers: App.lvRiverGame,
+    lvlakes: App.lvLakeGame,
+    lvroads: App.lvRoadGame,
+    lvcastles: App.lvCastleGame,
+    lvnature: App.lvNatureGame,
+    lvregions: App.lvRegionGame,
     bridges: App.bridgegame,
     parks: App.parkgame
   };

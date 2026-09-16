@@ -133,23 +133,58 @@ def queries():
         f'[out:json][timeout:600];{lv}'
         'node(area.lv)["place"~"^(city|town)$"]["population"];out qt;'
     )
-    # Orientation water: curated big lakes + main river polygons. Many
-    # riverbank polygons carry no name tag, so rivers stay patchy — the
-    # lakes are the visual anchors at country zoom. Edit lists to taste.
-    lakes = ("Lubāns|Lubāna ezers|Rāznas ezers|Engures ezers|Burtnieks|"
-             "Burtnieku ezers|Usmas ezers|Liepājas ezers|Papes ezers|"
-             "Ķīšezers|Juglas ezers|Babītes ezers|Alūksnes ezers|Sīvers|"
-             "Lielais Ludzas ezers|Cirīša ezers|Kāla ezers")
-    rivers = ("Daugava|Lielupe|Venta|Gauja|Aiviekste|Salaca|Abava|Ogre|"
-              "Dubna|Bārta|Mēmele|Mūsa|Iecava")
+    # ALL named water bodies: decor layer (area-gated at build) AND the
+    # lakes quiz (top N by ring area, reservoirs excluded — at build).
+    # riverbank is load-bearing: LV river polygons still use the OLD
+    # waterway=riverbank scheme, not natural=water.
     qs["latvia_water"] = (
         f'[out:json][timeout:600];{lv}('
-        f'way(area.lv)["natural"="water"]["name"~"^({lakes})$"];'
-        f'relation(area.lv)["natural"="water"]["name"~"^({lakes})$"];'
-        f'way(area.lv)["natural"="water"]["water"~"^(river|canal)$"]["name"~"^({rivers})$"];'
-        f'relation(area.lv)["natural"="water"]["water"~"^(river|canal)$"]["name"~"^({rivers})$"];'
-        f'way(area.lv)["waterway"="riverbank"]["name"~"^({rivers})$"];'
-        f'relation(area.lv)["waterway"="riverbank"]["name"~"^({rivers})$"];'
+        'way(area.lv)["natural"="water"]["name"];'
+        'relation(area.lv)["natural"="water"]["name"];'
+        'way(area.lv)["waterway"="riverbank"]["name"];'
+        'relation(area.lv)["waterway"="riverbank"]["name"];'
+        ");out geom qt;"
+    )
+    # River quiz: named ways, grouped per river at build. Whole-river
+    # relations are NOT used — Daugava and Gauja lack them entirely.
+    # Jaunpededze is the channelized lower Pededze, ending at the
+    # Aiviekste confluence near Lubāns — aliased at build
+    lv_rivers = ("Daugava|Gauja|Venta|Lielupe|Ogre|Salaca|Abava|Aiviekste|"
+                 "Dubna|Bārta|Mēmele|Mūsa|Iecava|Amata|Brasla|Irbe|Pededze|"
+                 "Jaunpededze|Rēzekne|Svēte|Tebra|Saka|Durbe")
+    qs["latvia_rivers"] = (
+        f'[out:json][timeout:600];{lv}'
+        f'way(area.lv)["waterway"~"^(river|canal)$"]["name"~"^({lv_rivers})$"];'
+        "out geom qt;"
+    )
+    # State main roads: A1..A15 (junk refs like A007/A10033… filtered at
+    # build with a strict ^A([1-9]|1[0-5])$ match).
+    qs["latvia_roads"] = (
+        f'[out:json][timeout:600];{lv}'
+        'way(area.lv)["highway"]["ref"~"^A[0-9]+$"];out geom qt;'
+    )
+    # Castles & palaces: historic=castle covers both in LV tagging
+    # (palaces are castle_type=palace/stately); manors and forts excluded.
+    qs["latvia_castles"] = (
+        f'[out:json][timeout:600];{lv}'
+        'nwr(area.lv)["historic"="castle"]["name"];out geom qt;'
+    )
+    # The five historical lands (kultūrvēsturiskās zemes) are mapped as
+    # boundary=traditional relations — NOT the statistical/planning regions
+    # that share these names, nor the villages called Zemgale/Sēlija.
+    qs["latvia_regions"] = (
+        f'[out:json][timeout:600];{lv}'
+        'relation(area.lv)["boundary"="traditional"]'
+        '["name"~"^(Kurzeme|Vidzeme|Zemgale|Latgale|Sēlija)$"];out geom qt;'
+    )
+    # Protected areas: name-pattern filtered at build. Tags alone cannot be
+    # trusted (Slītere NP is a boundary way, not a relation; the rezervāti
+    # are ways, one tagged leisure=nature_reserve only) — harvest broadly.
+    qs["latvia_nature"] = (
+        f'[out:json][timeout:600];{lv}('
+        'relation(area.lv)["boundary"~"^(national_park|protected_area)$"]["name"];'
+        'way(area.lv)["boundary"~"^(national_park|protected_area)$"]["name"];'
+        'way(area.lv)["leisure"="nature_reserve"]["name"];'
         ");out geom qt;"
     )
     return qs
@@ -234,7 +269,9 @@ def verify_latvia():
         print(f"WARNING: expected 42 units (7 cities + 35 novadi post-2025), got {len(rels)}")
     if len(rels) < 35 or cities < 5:
         sys.exit("FATAL: latvia_admin looks wrong, aborting")
-    for extra in ("latvia_cities", "latvia_places", "latvia_water"):
+    for extra in ("latvia_cities", "latvia_places", "latvia_water",
+                  "latvia_rivers", "latvia_roads", "latvia_castles",
+                  "latvia_nature", "latvia_regions"):
         path = RAW_DIR / f"{extra}.json"
         if path.exists():
             n = len(json.loads(path.read_text())["elements"])

@@ -13,12 +13,19 @@
 
   /* Per-kind lookups: card unit, summary wording, feature dataset, thumb hue */
   var KIND_UNIT = { hoods: " areas", latvia: " territories",
-    lvcities: " cities", lvcities5k: " cities",
+    lvcities: " cities", lvcities5k: " cities", lvcitiesall: " towns",
+    lvrivers: " rivers",
+    lvlakes: " lakes", lvroads: " roads", lvcastles: " castles",
+    lvnature: " areas", lvregions: " regions",
     bridges: " bridges", parks: " parks",
     tram: " lines", trolleybus: " lines", busday: " lines",
     busnight: " lines", rail: " lines" };
   var KIND_MISSED = { hoods: "Missed neighborhoods", latvia: "Missed territories",
     lvcities: "Missed cities", lvcities5k: "Missed cities",
+    lvcitiesall: "Missed towns",
+    lvrivers: "Missed rivers", lvlakes: "Missed lakes",
+    lvroads: "Missed roads", lvcastles: "Missed castles",
+    lvnature: "Missed areas", lvregions: "Missed regions",
     bridges: "Missed bridges",
     parks: "Missed parks", tram: "Missed lines", trolleybus: "Missed lines",
     busday: "Missed lines", busnight: "Missed lines", rail: "Missed lines" };
@@ -26,12 +33,33 @@
   var TRANSIT_HUE = { tram: "hsla(0, 65%, 55%, 0.9)",
     trolleybus: "hsla(140, 50%, 45%, 0.9)", busday: "hsla(215, 65%, 55%, 0.9)",
     busnight: "hsla(270, 55%, 60%, 0.9)", rail: "hsla(0, 0%, 60%, 0.95)" };
+  /* Latvia-card thumbnail overlays: what to draw over the land base.
+     Each mode gets its own hue so the cards read apart at a glance. */
+  var LV_THUMB = {
+    lvcities: { mode: "dots", key: "cities" },
+    lvcities5k: { mode: "dots", key: "cities5k" },
+    lvcitiesall: { mode: "dots", key: "citiesAll" },
+    lvcastles: { mode: "dots", key: "castles", fill: "hsla(285, 50%, 52%, 0.95)" },
+    lvrivers: { mode: "segs", key: "rivers", stroke: "hsla(205, 60%, 50%, 0.9)" },
+    lvroads: { mode: "segs", key: "roads", stroke: "hsla(25, 80%, 48%, 0.9)" },
+    lvlakes: { mode: "rings", key: "lakes", stroke: "hsla(220, 75%, 42%, 0.95)" },
+    lvnature: { mode: "rings", key: "nature",
+      fill: "hsla(130, 45%, 45%, 0.55)", stroke: "hsla(130, 45%, 35%, 0.9)" },
+    lvregions: { mode: "rings", key: "regions", mosaic: 1 }
+  };
 
   function featItemsFor(kind) {
     if (kind === "bridges") return App.data.bridges;
     if (kind === "parks") return App.data.parks;
     if (kind === "lvcities") return App.data.cities;
     if (kind === "lvcities5k") return App.data.cities5k;
+    if (kind === "lvcitiesall") return App.data.citiesAll;
+    if (kind === "lvrivers") return App.data.rivers;
+    if (kind === "lvlakes") return App.data.lakes;
+    if (kind === "lvroads") return App.data.roads;
+    if (kind === "lvcastles") return App.data.castles;
+    if (kind === "lvnature") return App.data.nature;
+    if (kind === "lvregions") return App.data.regions;
     var key = { tram: "tram", trolleybus: "trolleybus", busday: "busDay",
                 busnight: "busNight", rail: "rail" }[kind];
     return key && App.data.transit ? App.data.transit[key] : null;
@@ -104,17 +132,20 @@
     ctx.scale(dpr, dpr);
     var t = thumbTransform(THUMB, data);
     var C = App.renderer.COLORS;
-    if (level.kind === "latvia") {
-      // Pastel mosaic like the Riga Neighborhoods card: every territory
-      // over the land base in its shading tint, water on top. Per-unit
-      // fills so enclave holes and carved cities tile correctly.
+    if (level.ds) {
+      // Latvia family: land base (mosaic tints for the territories card),
+      // decor water, then this card's quiz features per the LV_THUMB spec.
+      // Per-unit fills so enclave holes and carved cities tile correctly.
+      var mosaic = level.kind === "latvia";
       data.hoods.forEach(function (h) {
         ctx.beginPath();
         traceRingsT(ctx, h.rings, t);
         ctx.fillStyle = C.thumbBase;
         ctx.fill("evenodd");
-        ctx.fillStyle = "hsla(" + ((h.id * 47) % 360) + ", 45%, 55%, 0.45)";
-        ctx.fill("evenodd");
+        if (mosaic) {
+          ctx.fillStyle = "hsla(" + ((h.id * 47) % 360) + ", 45%, 55%, 0.45)";
+          ctx.fill("evenodd");
+        }
         ctx.strokeStyle = C.hoodLine;
         ctx.lineWidth = 0.5;
         ctx.stroke();
@@ -123,30 +154,46 @@
       data.water.forEach(function (w) { traceRingsT(ctx, w.rings, t); });
       ctx.fillStyle = C.water;
       ctx.fill("evenodd");
-    } else if (level.kind === "lvcities" || level.kind === "lvcities5k") {
-      // City-dot cards: land-filled units with borders, water, and an
-      // accent dot per quiz city.
-      data.hoods.forEach(function (h) {
+      var spec = LV_THUMB[level.kind];
+      var items = spec ? data[spec.key] || [] : [];
+      if (spec && spec.mode === "dots") {
+        items.forEach(function (d) {
+          var a = App.geom.hoodAnchor(d);
+          ctx.beginPath();
+          ctx.arc(a[0] * t.s + t.ox, a[1] * t.s + t.oy, 1.6, 0, Math.PI * 2);
+          ctx.fillStyle = spec.fill || C.thumbAccent;
+          ctx.fill();
+        });
+      } else if (spec && spec.mode === "segs") {
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
         ctx.beginPath();
-        traceRingsT(ctx, h.rings, t);
-        ctx.fillStyle = C.thumbBase;
-        ctx.fill("evenodd");
-        ctx.strokeStyle = C.hoodLine;
-        ctx.lineWidth = 0.5;
+        items.forEach(function (b) {
+          b.segs.forEach(function (seg) {
+            ctx.moveTo(seg[0][0] * t.s + t.ox, seg[0][1] * t.s + t.oy);
+            for (var i = 1; i < seg.length; i++) {
+              ctx.lineTo(seg[i][0] * t.s + t.ox, seg[i][1] * t.s + t.oy);
+            }
+          });
+        });
+        ctx.strokeStyle = spec.stroke || C.thumbAccent;
+        ctx.lineWidth = 1.1;
         ctx.stroke();
-      });
-      ctx.beginPath();
-      data.water.forEach(function (w) { traceRingsT(ctx, w.rings, t); });
-      ctx.fillStyle = C.water;
-      ctx.fill("evenodd");
-      var dots = level.kind === "lvcities" ? data.cities : data.cities5k;
-      dots.forEach(function (d) {
-        var a = App.geom.hoodAnchor(d);
-        ctx.beginPath();
-        ctx.arc(a[0] * t.s + t.ox, a[1] * t.s + t.oy, 1.6, 0, Math.PI * 2);
-        ctx.fillStyle = C.thumbAccent;
-        ctx.fill();
-      });
+      } else if (spec) {
+        items.forEach(function (b) {
+          ctx.beginPath();
+          traceRingsT(ctx, b.rings, t);
+          ctx.fillStyle = spec.mosaic
+            ? "hsla(" + ((b.id * 72) % 360) + ", 45%, 55%, 0.5)"
+            : spec.fill || C.water;
+          ctx.fill("evenodd");
+          // mosaic cards keep the faint base border, not the accent
+          ctx.strokeStyle = spec.mosaic ? C.hoodLine
+            : spec.stroke || C.thumbAccent;
+          ctx.lineWidth = spec.mosaic ? 0.5 : 0.7;
+          ctx.stroke();
+        });
+      }
     } else if (level.kind === "hoods") {
       // Pastel mosaic: every neighborhood in its shading tint
       data.hoods.forEach(function (h) {

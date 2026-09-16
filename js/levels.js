@@ -83,6 +83,28 @@
           ids: lv.cities5k.map(function (c) { return c.id; }),
           itemCount: lv.cities5k.length, bbox: lv.meta.bounds, ds: lv });
       }
+      if (lv.citiesAll && lv.citiesAll.length) {
+        latvia.push({ id: "lv:citiesall", kind: "lvcitiesall",
+          name: "All towns",
+          note: "marathon · click the dot", hoodId: -1,
+          ids: lv.citiesAll.map(function (c) { return c.id; }),
+          itemCount: lv.citiesAll.length, bbox: lv.meta.bounds, ds: lv });
+      }
+      // Countrywide feature quizzes, one card per dataset key
+      [["regions", "lvregions", "Historical regions", "click the region"],
+       ["rivers", "lvrivers", "Rivers", "click the river"],
+       ["lakes", "lvlakes", "Lakes", "click the lake"],
+       ["roads", "lvroads", "Main highways", "A1–A15 · click the road"],
+       ["castles", "lvcastles", "Castles & palaces", "click the castle"],
+       ["nature", "lvnature", "National parks & reserves", "click the area"]
+      ].forEach(function (spec) {
+        var items = lv[spec[0]];
+        if (!items || !items.length) return;
+        latvia.push({ id: "lv:" + spec[0], kind: spec[1], name: spec[2],
+          note: "all of Latvia · " + spec[3], hoodId: -1,
+          ids: items.map(function (b) { return b.id; }),
+          itemCount: items.length, bbox: lv.meta.bounds, ds: lv });
+      });
     }
 
     var collator = new Intl.Collator("lv");

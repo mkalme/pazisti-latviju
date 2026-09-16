@@ -4,8 +4,9 @@
     {
       "name": "riga-streets",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["tools/serve.py", "8747"],
-      "port": 8747
+      "runtimeArgs": ["tools/serve.py"],
+      "port": 8747,
+      "autoPort": true
     }
   ]
 }

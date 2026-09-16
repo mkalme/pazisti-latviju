@@ -26,6 +26,7 @@ Hard-won policies — do not casually undo:
 """
 import json
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -41,8 +42,15 @@ K_Y = 111132.0                                 # meters per degree lat
 
 UNIT_TOL = 80.0       # Douglas-Peucker tolerance for admin borders, meters
 WATER_TOL = 60.0
+RIVER_TOL = 250.0     # river meanders are sub-pixel at country zoom
+ROAD_TOL = 120.0
+QUIZ_RING_TOL = 200.0  # lake/nature QUIZ outlines: dense 60 m shorelines
+#                        stroke as fuzz at country zoom
 STITCH_TOL = 1.0      # ring endpoint matching, meters
-MIN_WATER_AREA = 5e5  # m^2 — at country zoom only big lakes/rivers read
+MIN_WATER_AREA = 2e6  # m^2 decor gate — the broad fetch has 2k+ bodies
+RIVER_POLY_MIN = 5e4  # …but river/canal polygons come as CHAINS of small
+#                       pieces: gate them gently or the blue river chops up
+TOP_LAKES = 20        # lake quiz size (largest by area, reservoirs excluded)
 
 # State cities that exist only as titular cities inside a novads. All three
 # must be present in latvia_cities.json or the build aborts.
@@ -59,6 +67,110 @@ def lv_key(name):
             for ch in name.lower()]
 
 
+def _d(p, q):
+    return math.hypot(p[0] - q[0], p[1] - q[1])
+
+
+def _len(seg):
+    return sum(_d(seg[k], seg[k + 1]) for k in range(len(seg) - 1))
+
+
+def merge_exact(segs):
+    """Splice polylines that share an exact endpoint used by exactly two
+    of them (consecutive OSM ways share nodes, so most joints are exact).
+    Junction endpoints (3+ ways) are left alone."""
+    segs = [list(s) for s in segs]
+    changed = True
+    while changed:
+        changed = False
+        ends = {}
+        for i, s in enumerate(segs):
+            for p in (tuple(s[0]), tuple(s[-1])):
+                ends.setdefault(p, []).append(i)
+        for p, ids in ends.items():
+            ids = list(dict.fromkeys(ids))
+            if len(ids) != 2:
+                continue
+            i, j = ids
+            a, b = segs[i], segs[j]
+            if tuple(a[0]) == p:
+                a = a[::-1]
+            if tuple(b[-1]) == p:
+                b = b[::-1]
+            if tuple(a[-1]) == p and tuple(b[0]) == p:
+                segs[i] = a + b[1:]
+                del segs[j]
+                changed = True
+                break
+    return segs
+
+
+def dominant_chain(segs, join, chain_gap, keep_frac=0.4):
+    """Heal a named line feature: drop far-away same-named strays (a second
+    river called Brasla, a mistagged A3 stub near Madona), then merge the
+    remaining pieces end-to-end — nearest endpoints first, with straight
+    connectors bridging real mapping gaps (the Daugava has no centerline
+    for 3.3 km near Jēkabpils; the upper Gauja for 15.5 km)."""
+    segs = merge_exact(segs)
+    if len(segs) <= 1:
+        return segs
+    # components by endpoint proximity, keep those near the longest's size
+    par = list(range(len(segs)))
+
+    def find(i):
+        while par[i] != i:
+            par[i] = par[par[i]]
+            i = par[i]
+        return i
+
+    for i in range(len(segs)):
+        for j in range(i + 1, len(segs)):
+            if min(_d(a, b) for a in (segs[i][0], segs[i][-1])
+                   for b in (segs[j][0], segs[j][-1])) <= join:
+                par[find(i)] = find(j)
+    comps = {}
+    for i in range(len(segs)):
+        comps.setdefault(find(i), []).append(i)
+    lengths = {k: sum(_len(segs[i]) for i in ids) for k, ids in comps.items()}
+    best = max(lengths.values())
+    pool = [list(segs[i]) for k, ids in comps.items()
+            if lengths[k] >= keep_frac * best for i in ids]
+    # greedy end-to-end merging across gaps up to chain_gap. A connector
+    # may not exceed the shorter piece it joins: bridging the Daugava's
+    # 3.3 km hole between two 167 km halves is right, dragging the line
+    # from the Gauja's mouth 15 km back inland to a 2 km oxbow is not —
+    # such fragments stay as standalone dashes.
+    lens = [_len(s) for s in pool]
+    while len(pool) > 1:
+        pick = None
+        bd = chain_gap
+        for i in range(len(pool)):
+            for j in range(i + 1, len(pool)):
+                limit = min(chain_gap, max(2000.0, min(lens[i], lens[j])))
+                for ai in (0, -1):
+                    for bi in (0, -1):
+                        dm = _d(pool[i][ai], pool[j][bi])
+                        if dm <= limit and dm < bd:
+                            bd = dm
+                            pick = (i, j, ai, bi)
+        if pick is None:
+            break
+        i, j, ai, bi = pick
+        a = pool[i] if ai == -1 else pool[i][::-1]
+        b = pool[j] if bi == 0 else pool[j][::-1]
+        merged = a + b  # the joint doubles as a straight gap connector
+        mlen = lens[i] + lens[j] + bd
+        pool = [pool[k] for k in range(len(pool)) if k not in (i, j)]
+        lens = [lens[k] for k in range(len(lens)) if k not in (i, j)]
+        pool.append(merged)
+        lens.append(mlen)
+    # leftover dashes that never chained are closed oxbow arms and tiny
+    # orphans — real geometry, but they read as glitches at country zoom
+    keep = max(lens)
+    return [pool[k] for k in range(len(pool))
+            if lens[k] >= min(3000.0, keep)]
+
+
 def load(name):
     return json.loads((RAW_DIR / f"{name}.json").read_text())
 
@@ -67,11 +179,21 @@ def main():
     admin_raw = load("latvia_admin")
     carved_raw = load("latvia_cities")
     water_raw = load("latvia_water")
+    rivers_raw = load("latvia_rivers")
+    roads_raw = load("latvia_roads")
+    castles_raw = load("latvia_castles")
+    nature_raw = load("latvia_nature")
+    regions_raw = load("latvia_regions")
 
-    # Projection origin over ALL geometry so every coordinate is positive.
+    # Projection origin over ALL geometry so every coordinate is positive
+    # (ways crossing the border carry their full course, past Latvia).
     lon_min, lat_max = 999.0, -999.0
-    for data in (admin_raw, carved_raw, water_raw):
+    for data in (admin_raw, carved_raw, water_raw, rivers_raw, roads_raw,
+                 castles_raw, nature_raw, regions_raw):
         for el in data["elements"]:
+            if "lon" in el:  # plain nodes (castles)
+                lon_min = min(lon_min, el["lon"])
+                lat_max = max(lat_max, el["lat"])
             for geom in ([el.get("geometry") or []]
                          + [m.get("geometry") or [] for m in el.get("members", [])]):
                 for pt in geom:
@@ -158,20 +280,17 @@ def main():
     print(f"units: {len(units)} ({n_cities + len(carved)} state cities, "
           f"{len(units) - n_cities - len(carved)} novadi)")
 
-    # --- water: curated big lakes + river polygons (mirrors the Riga rules) ---
-    water = []
-    dropped_small = dropped_open = 0
-    for el in water_raw["elements"]:
-        rings = []
+    # --- water: decor layer (area-gated) + the lakes quiz (top N) ---
+    def water_rings(el):
+        """Simplified rings for a natural=water way/relation, or []."""
         if el["type"] == "way":
             geom = el.get("geometry")
             if not geom:
-                continue
+                return []
             pts = project(geom)
             if (abs(pts[0][0] - pts[-1][0]) > STITCH_TOL
                     or abs(pts[0][1] - pts[-1][1]) > STITCH_TOL):
-                dropped_open += 1
-                continue
+                return []
             rings = [pts]
         elif el["type"] == "relation":
             outers = [project(m["geometry"]) for m in el.get("members", [])
@@ -182,21 +301,55 @@ def main():
                       and m.get("geometry")]
             oring, _ = stitch_rings(outers, STITCH_TOL)
             iring, _ = stitch_rings(inners, STITCH_TOL)
-            rings = oring + iring
             if not oring:
-                continue
+                return []
+            rings = oring + iring
+        else:
+            return []
+        rings = [round_pts(simplify(r, WATER_TOL)) for r in rings]
+        return [r for r in rings if len(r) >= 4]
+
+    water = []
+    lake_cand = {}  # name -> (outer_area, rings); biggest body per name
+    dropped_small = 0
+    for el in water_raw["elements"]:
+        rings = water_rings(el)
         if not rings:
             continue
-        outer_area = max((ring_area(r) for r in rings), default=0.0)
-        if outer_area < MIN_WATER_AREA:
-            dropped_small += 1
-            continue
-        rings = [round_pts(simplify(r, WATER_TOL)) for r in rings]
-        rings = [r for r in rings if len(r) >= 4]
-        if rings:
+        outer_area = max(ring_area(r) for r in rings)
+        tags = el.get("tags", {})
+        # rivers/canals arrive as CHAINS of small polygon pieces (mostly
+        # old-scheme waterway=riverbank) — a flat area gate would chop the
+        # blue Daugava into fragments
+        is_river = (tags.get("waterway") == "riverbank"
+                    or tags.get("water") in ("river", "canal"))
+        if outer_area >= (RIVER_POLY_MIN if is_river else MIN_WATER_AREA):
             water.append({"rings": rings})
-    print(f"water: {len(water)} bodies ({dropped_small} tiny dropped, "
-          f"{dropped_open} open ways skipped)")
+        else:
+            dropped_small += 1
+        name = tags.get("name")
+        if name and not is_river and tags.get("water") != "reservoir":
+            if name not in lake_cand or outer_area > lake_cand[name][0]:
+                lake_cand[name] = (outer_area, rings)
+    top = sorted(lake_cand.items(), key=lambda kv: -kv[1][0])[:TOP_LAKES]
+    # border lakes carry bilingual names ("Riču ezers / возера Рычы");
+    # quiz outlines get a coarser pass — 60 m shoreline detail strokes as
+    # fuzz at country zoom
+    lakes = [{"name": n.split(" / ")[0], "segs": [],
+              "rings": [q for q in (round_pts(simplify(r, QUIZ_RING_TOL))
+                                    for r in rings) if len(q) >= 4]}
+             for n, (_, rings) in top]
+    for l in lakes:
+        l["bbox"] = bbox_of([p for ring in l["rings"] for p in ring])
+    lakes.sort(key=lambda l: lv_key(l["name"]))
+    for i, l in enumerate(lakes):
+        l["id"] = i
+    print(f"water: {len(water)} decor bodies ({dropped_small} small dropped); "
+          f"lakes quiz: {len(lakes)}")
+    for n, (a, _) in top:
+        print(f"  {n}: {a / 1e6:.1f} km²")
+    if not any(l["name"].startswith("Lubān") for l in lakes):
+        print("WARNING: Lubāns missing from the lake quiz — check the fetch")
 
     # --- city dot-marker quiz targets, two population tiers ---
     # place=city|town nodes with a population tag; the thresholds are the
@@ -205,6 +358,13 @@ def main():
     TIER_5K = 5000
     DOT_R = 250.0  # tiny 12-gon ring: sub-pixel at country zoom, so the
     #                renderer and hit tests treat it as a dot marker
+
+    def dot_ring(x, y):
+        ring = [[round(x + DOT_R * math.cos(2 * math.pi * k / 12)),
+                 round(y + DOT_R * math.sin(2 * math.pi * k / 12))]
+                for k in range(12)]
+        ring.append(list(ring[0]))
+        return ring
     places_raw = load("latvia_places")
     best = {}
     bad_pop = 0
@@ -218,7 +378,7 @@ def main():
         except ValueError:
             bad_pop += 1
             continue
-        if not name or pop < TIER_5K:
+        if not name or pop <= 0:
             continue
         if name not in best or pop > best[name][0]:
             best[name] = (pop, el["lon"], el["lat"])
@@ -232,26 +392,285 @@ def main():
             if pop < min_pop:
                 continue
             x, y = project([{"lon": lon, "lat": lat}])[0]
-            ring = [[round(x + DOT_R * math.cos(2 * math.pi * k / 12)),
-                     round(y + DOT_R * math.sin(2 * math.pi * k / 12))]
-                    for k in range(12)]
-            ring.append(list(ring[0]))
+            ring = dot_ring(x, y)
             items.append({"id": len(items), "name": name,
                           "segs": [], "rings": [ring], "bbox": bbox_of(ring)})
         return items
 
     cities = city_items(TIER_10K)
     cities5k = city_items(TIER_5K)
+    cities_all = city_items(1)  # every official town with a population tag
     print(f"cities: {len(cities)} over {TIER_10K}, {len(cities5k)} over "
-          f"{TIER_5K} ({bad_pop} unparsable population tags)")
+          f"{TIER_5K}, {len(cities_all)} in total "
+          f"({bad_pop} unparsable population tags)")
     for name, (pop, _, _) in ranked:
         print(f"  {name}: {pop}")
     if not 12 <= len(cities) <= 30:
         print(f"WARNING: expected roughly 15-20 cities over 10k, got {len(cities)}")
     if not 25 <= len(cities5k) <= 60:
         print(f"WARNING: expected roughly 30-45 cities over 5k, got {len(cities5k)}")
-    if len(cities) < 8 or len(cities5k) <= len(cities):
+    if not 60 <= len(cities_all) <= 120:
+        print(f"WARNING: expected ~81 towns in total, got {len(cities_all)}")
+    if len(cities) < 8 or len(cities5k) <= len(cities) \
+            or len(cities_all) <= len(cities5k):
         sys.exit("FATAL: city tiers look wrong — check latvia_places data")
+
+    # --- rivers: named ways grouped per river. Whole-river relations are
+    # NOT used — Daugava and Gauja have none; ways are the uniform source,
+    # and cross-border gaps simply become separate segs. ---
+    # the channelized lower Pededze, down to the Aiviekste confluence
+    # (the mapped Aiviekste passes 0.5 km from Jaunpededze's end — the
+    # two visually merge near Lubāns, which is the real hydrology)
+    RIVER_ALIAS = {"Jaunpededze": "Pededze"}
+    river_groups = {}
+    for el in rivers_raw["elements"]:
+        if el["type"] != "way" or not el.get("geometry"):
+            continue
+        name = el.get("tags", {}).get("name")
+        if not name:
+            continue
+        name = RIVER_ALIAS.get(name, name)
+        seg = round_pts(simplify(project(el["geometry"]), RIVER_TOL))
+        if len(seg) >= 2:
+            river_groups.setdefault(name, []).append(seg)
+    # same-named different rivers of COMPARABLE length defeat the largest-
+    # component rule — pin those to a locator point (Kurzeme's Saka at
+    # Pāvilosta, not the Daugava side arm at Jēkabpils)
+    RIVER_LOCK = {"Saka": (56.87, 21.19)}
+    # Approximate mean discharge (m³/s) — not in OSM; only the RELATIVE
+    # magnitude matters, it scales the drawn line width (log-mapped)
+    RIVER_FLOW = {
+        "Daugava": 678, "Lielupe": 106, "Venta": 95, "Gauja": 72,
+        "Aiviekste": 59, "Salaca": 33, "Dubna": 28, "Abava": 27,
+        "Ogre": 19, "Irbe": 17, "Bārta": 15, "Mēmele": 15, "Mūsa": 11,
+        "Saka": 11, "Pededze": 10, "Iecava": 7, "Rēzekne": 6, "Svēte": 5,
+        "Amata": 4.5, "Brasla": 4, "Tebra": 4, "Durbe": 3,
+    }
+    rivers = []
+    for name in sorted(river_groups, key=lv_key):
+        # component join = chain gap: a short legitimate continuation near
+        # the main course (Zvidzienas kanāls) must survive the stray
+        # filter, which only judges genuinely DISTANT same-named pieces
+        segs = dominant_chain(river_groups[name], 20000, 20000)
+        if name in RIVER_LOCK:
+            lat, lon = RIVER_LOCK[name]
+            lx, ly = project([{"lon": lon, "lat": lat}])[0]
+            segs = [s for s in segs
+                    if min(_d((lx, ly), p) for p in s) <= 30000]
+        lw = round(1.55 + 0.75 * math.log10(RIVER_FLOW.get(name, 5.0)), 1)
+        rivers.append({"id": len(rivers), "name": name, "segs": segs,
+                       "rings": [], "lw": lw,
+                       "bbox": bbox_of([p for s in segs for p in s])})
+
+    # Orient each river's MAIN chain source->mouth so the renderer can
+    # taper the drawn width along the flow. Mouths are detectable — they
+    # touch the recipient river or lake; sea outlets (and rivers where
+    # BOTH ends touch water: Aiviekste runs Lubāns->Daugava, Rēzekne
+    # Rāznas->Lubāns) carry explicit coordinates instead.
+    RIVER_MOUTH = {
+        "Daugava": (57.06, 24.02), "Gauja": (57.16, 24.27),
+        "Lielupe": (57.01, 23.93), "Venta": (57.40, 21.53),
+        "Salaca": (57.75, 24.36), "Irbe": (57.60, 21.72),
+        "Saka": (56.89, 21.17),
+        "Aiviekste": (56.61, 25.75),
+        "Rēzekne": (56.72, 26.95),
+        "Dubna": (56.36, 26.17),  # rises from quiz-lake Sīvers, so its
+        #                           SOURCE touches lake points too
+    }
+    lake_pts = [p for l in lakes for ring in l["rings"] for p in ring]
+    for r in rivers:
+        seg = max(r["segs"], key=_len)
+        if r["name"] in RIVER_MOUTH:
+            lat, lon = RIVER_MOUTH[r["name"]]
+            mpt = project([{"lon": lon, "lat": lat}])[0]
+            def endscore(p, mpt=mpt):
+                return _d(p, mpt)
+        else:
+            other = [p for o in rivers if o is not r
+                     for s in o["segs"] for p in s] + lake_pts
+            def endscore(p, other=other):
+                return min(_d(p, q) for q in other)
+        if endscore(seg[0]) < endscore(seg[-1]):
+            seg.reverse()
+    print(f"rivers: {len(rivers)} "
+          f"({sum(len(s) for r in rivers for s in r['segs'])} pts)")
+    if len(rivers) < 15:
+        print(f"WARNING: expected ~20 rivers, got {len(rivers)}: "
+              f"{sorted(river_groups)}")
+
+    # --- main highways A1..A15 (strict — OSM carries junk A-refs too).
+    # The hint is the official route name: the most frequent way name
+    # containing a dash, so town street names ("Rīgas iela") never win. ---
+    road_groups = {}
+    road_names = {}
+    for el in roads_raw["elements"]:
+        if el["type"] != "way" or not el.get("geometry"):
+            continue
+        tags = el.get("tags", {})
+        ref = tags.get("ref", "")
+        if not re.match(r"^A([1-9]|1[0-5])$", ref):
+            continue
+        seg = round_pts(simplify(project(el["geometry"]), ROAD_TOL))
+        if len(seg) >= 2:
+            road_groups.setdefault(ref, []).append(seg)
+        nm = tags.get("name")
+        # Route names, not town streets: dashed itineraries first, bypass/
+        # highway names ("Rēzeknes apvedceļš") as the fallback tier
+        if nm and ("—" in nm or " - " in nm or "apvedceļš" in nm
+                   or "šoseja" in nm):
+            road_names.setdefault(ref, {})
+            road_names[ref][nm] = road_names[ref].get(nm, 0) + 1
+    roads = []
+    for ref in sorted(road_groups, key=lambda r: int(r[1:])):
+        names = road_names.get(ref, {})
+        segs = dominant_chain(road_groups[ref], 3000, 3000)
+        roads.append({"id": len(roads), "name": ref,
+                      "hint": max(names, key=names.get) if names else "",
+                      "segs": segs, "rings": [],
+                      "bbox": bbox_of([p for s in segs for p in s])})
+    print(f"roads: {len(roads)} "
+          f"({sum(len(s) for r in roads for s in r['segs'])} pts)")
+    for r in roads:
+        print(f"  {r['name']}: {r['hint']}")
+    if len(roads) != 15:
+        print(f"WARNING: expected exactly A1..A15, got {len(roads)}")
+    if len(roads) < 10:
+        sys.exit("FATAL: main road set looks wrong")
+
+    # --- castles & palaces: historic=castle points (palaces are
+    # castle_type=palace/stately under the same tag). The name pattern
+    # drops what slipped in under that tag but is no castle: fortress
+    # sub-elements (redouts/lunettes), earthworks, lone towers, hillfort
+    # mounds, manors, museums and "castle site" markers. CASTLE_EXCLUDE
+    # holds judgment calls the pattern cannot catch. ---
+    CASTLE_DROP = re.compile(
+        "muiž|skansts|reduts|roduts|lunete|vieta|tornis|namiņ|muzejs|"
+        "cietok|pilskaln")
+    CASTLE_EXCLUDE = {
+        "Cēsu pilsdrupas",     # same site as "Cēsu pils komplekss"
+        "Mazā Mežotnes pils",  # the manor annex opposite Mežotnes pils
+        "Bruņinieku pils",     # generic name, ambiguous target
+    }
+    castle_pts = {}
+    for el in castles_raw["elements"]:
+        name = el.get("tags", {}).get("name")
+        if (not name or name in CASTLE_EXCLUDE or name in castle_pts
+                or CASTLE_DROP.search(name)):
+            continue
+        if el["type"] == "node":
+            x, y = project([{"lon": el["lon"], "lat": el["lat"]}])[0]
+        else:
+            flat = [p for g in ([el.get("geometry") or []]
+                                + [m.get("geometry") or []
+                                   for m in el.get("members", [])])
+                    for p in project(g)]
+            if not flat:
+                continue
+            bb = bbox_of(flat)
+            x, y = (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2
+        castle_pts[name] = (x, y)
+    castles = []
+    for name in sorted(castle_pts, key=lv_key):
+        ring = dot_ring(*castle_pts[name])
+        castles.append({"id": len(castles), "name": name, "segs": [],
+                        "rings": [ring], "bbox": bbox_of(ring)})
+    print(f"castles: {len(castles)}")
+    for c in castles:
+        print(f"  {c['name']}")
+    if len(castles) < 15:
+        sys.exit("FATAL: too few castles — check latvia_castles data")
+
+    # --- national parks & strict reserves, by NAME pattern (tags cannot
+    # be trusted: Slītere NP is a boundary WAY, the rezervāti are ways,
+    # one of them tagged leisure=nature_reserve only). Relations first so
+    # a same-named legacy way never shadows the proper multipolygon. ---
+    NATURE_RE = re.compile("nacionālais parks|dabas rezervāts")
+    NATURE_EXCLUDE = {
+        # historic core zones inside today's national parks, not part of
+        # the official 4 NP + 4 rezervāti set
+        "Slīteres dabas rezervāts",
+        "Lielā Ķemeru tīreļa dabas rezervāts",
+        "Krievu salas dabas rezervāts",
+    }
+    nature = []
+    seen_nature = set()
+    ordered = ([e for e in nature_raw["elements"] if e["type"] == "relation"]
+               + [e for e in nature_raw["elements"] if e["type"] == "way"])
+    for el in ordered:
+        name = el.get("tags", {}).get("name", "")
+        if (not NATURE_RE.search(name) or name in seen_nature
+                or name in NATURE_EXCLUDE):
+            continue
+        if el["type"] == "way":
+            geom = el.get("geometry")
+            if not geom:
+                continue
+            pts = project(geom)
+            if (abs(pts[0][0] - pts[-1][0]) > STITCH_TOL
+                    or abs(pts[0][1] - pts[-1][1]) > STITCH_TOL):
+                print(f"  note: skipped {name} (open way)")
+                continue
+            oring = [pts]
+            iring = []
+        else:
+            outers = [project(m["geometry"]) for m in el.get("members", [])
+                      if m.get("type") == "way" and m.get("role") in ("outer", "")
+                      and m.get("geometry")]
+            inners = [project(m["geometry"]) for m in el.get("members", [])
+                      if m.get("type") == "way" and m.get("role") == "inner"
+                      and m.get("geometry")]
+            oring, _ = stitch_rings(outers, STITCH_TOL)
+            iring, _ = stitch_rings(inners, STITCH_TOL)
+        rings = [round_pts(simplify(r, QUIZ_RING_TOL)) for r in oring + iring]
+        rings = [r for r in rings if len(r) >= 4]
+        if not oring or not rings:
+            print(f"  note: skipped {name} (unclosed rings)")
+            continue
+        seen_nature.add(name)
+        nature.append({"name": name, "segs": [], "rings": rings,
+                       "bbox": bbox_of([p for r in rings for p in r])})
+    nature.sort(key=lambda n: lv_key(n["name"]))
+    for i, n in enumerate(nature):
+        n["id"] = i
+    print(f"nature: {len(nature)}")
+    for n in nature:
+        print(f"  {n['name']}")
+    if len(nature) != 8:
+        print(f"WARNING: expected 4 national parks + 4 rezervāti = 8, got {len(nature)}")
+    if len(nature) < 4:
+        sys.exit("FATAL: protected-area set looks wrong")
+
+    # --- the five historical lands (kultūrvēsturiskās zemes): OSM maps
+    # them as boundary=traditional relations following the 2021 law ---
+    REGION_NAMES = {"Kurzeme", "Vidzeme", "Zemgale", "Latgale", "Sēlija"}
+    regions = []
+    for el in regions_raw["elements"]:
+        if el["type"] != "relation":
+            continue
+        name = el.get("tags", {}).get("name", "")
+        if name not in REGION_NAMES:
+            continue
+        outers = [project(m["geometry"]) for m in el.get("members", [])
+                  if m.get("type") == "way" and m.get("role") in ("outer", "")
+                  and m.get("geometry")]
+        inners = [project(m["geometry"]) for m in el.get("members", [])
+                  if m.get("type") == "way" and m.get("role") == "inner"
+                  and m.get("geometry")]
+        oring, lo = stitch_rings(outers, STITCH_TOL)
+        iring, li = stitch_rings(inners, STITCH_TOL)
+        rings = [round_pts(simplify(r, QUIZ_RING_TOL)) for r in oring + iring]
+        rings = [r for r in rings if len(r) >= 4]
+        if not oring or lo or li or not rings:
+            sys.exit(f"FATAL: could not close rings for region {name}")
+        regions.append({"name": name, "segs": [], "rings": rings,
+                        "bbox": bbox_of([p for r in rings for p in r])})
+    regions.sort(key=lambda r: lv_key(r["name"]))
+    for i, r in enumerate(regions):
+        r["id"] = i
+    print(f"regions: {len(regions)}: "
+          + ", ".join(r["name"] for r in regions))
+    if len(regions) != 5:
+        sys.exit("FATAL: expected the 5 historical lands")
 
     # --- emit ---
     all_bb = units[0]["bbox"]
@@ -267,6 +686,13 @@ def main():
         "water": water,
         "cities": cities,
         "cities5k": cities5k,
+        "citiesAll": cities_all,
+        "rivers": rivers,
+        "lakes": lakes,
+        "roads": roads,
+        "castles": castles,
+        "nature": nature,
+        "regions": regions,
         "land": 1,
     }
     js = "window.LATVIA_DATA=" + json.dumps(out, ensure_ascii=False,
@@ -274,8 +700,9 @@ def main():
     OUT_PATH.write_text(js, encoding="utf-8")
     size = OUT_PATH.stat().st_size
     print(f"wrote {OUT_PATH} ({size / 1e6:.2f} MB)")
-    if size > 600_000:
-        print(f"WARNING: over the ~600 KB budget — raise UNIT_TOL ({UNIT_TOL} m)?")
+    if size > 900_000:
+        print("WARNING: over the ~900 KB budget — raise RIVER_TOL/ROAD_TOL "
+              "or lower MIN_WATER_AREA generosity")
 
 
 if __name__ == "__main__":

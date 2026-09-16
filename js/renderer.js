@@ -18,6 +18,7 @@
     correct1: "#2e9e44",
     correct2: "#d4b90c",
     correct3: "#e07b1f",
+    correctBlue: "#1d6fb8",
     missed: "#c0392b",
     label: "#1f2937",
     labelHalo: "rgba(255,255,255,0.9)",
@@ -40,6 +41,7 @@
     correct1: "#3fb950",
     correct2: "#d4b90c",
     correct3: "#e8863a",
+    correctBlue: "#58ace8",
     missed: "#e5534b",
     label: "#e6e9ee",
     labelHalo: "rgba(20, 23, 28, 0.92)",
@@ -333,7 +335,8 @@
     // outlines, neutral until answered, then in its state color.
     if (cfg.featQuiz) {
       var feats = cfg.featQuiz.items;
-      var bw2 = Math.max(3, Math.min(12, 8 * scale));
+      // Country map: rivers/roads read best as fine lines
+      var bw2 = data.land ? 2 : Math.max(3, Math.min(12, 8 * scale));
       for (var bi = 0; bi < feats.length; bi++) {
         var br = feats[bi];
         if (!App.geom.bboxIntersects(br.bbox, cull)) continue;
@@ -362,15 +365,21 @@
           ctx.fill("evenodd");
           ctx.globalAlpha = 1;
           ctx.strokeStyle = bcol;
-          ctx.lineWidth = 2;
+          // hairline lake/park outlines on the country map, like borders
+          ctx.lineWidth = data.land ? 1.25 / res : 2;
           ctx.stroke();
         }
         if (br.segs.length) {
-          ctx.beginPath();
-          tracePath(ctx, br, bview, minStep2);
-          ctx.strokeStyle = bcol;
-          ctx.lineWidth = bkey ? bw2 + 1.5 : bw2;
-          ctx.stroke();
+          // rivers carry a flow-scaled width (lw) and taper source->mouth
+          if (br.lw && data.land) {
+            drawTaperedRiver(ctx, br, bview, bcol, bkey ? 1 : 0);
+          } else {
+            ctx.beginPath();
+            tracePath(ctx, br, bview, minStep2);
+            ctx.strokeStyle = bcol;
+            ctx.lineWidth = bkey ? bw2 + (data.land ? 1 : 1.5) : bw2;
+            ctx.stroke();
+          }
         }
       }
     }
@@ -390,6 +399,52 @@
     ctx.strokeText(street.name, sx, sy - 6);
     ctx.fillStyle = COLORS.label;
     ctx.fillText(street.name, sx, sy - 6);
+  }
+
+  /* Rivers: stroke the main chain in chunks whose width grows from a thin
+     source toward the mouth — the data guarantees the longest seg runs
+     source->mouth. Round caps blend the chunk joints seamlessly; side
+     arms draw at source width. */
+  var TAPER_SRC = 1.1;
+  function drawTaperedRiver(ctx, br, view, color, bonus) {
+    var k, s, i, L;
+    if (br._tlen === undefined) {
+      var best = -1;
+      for (k = 0; k < br.segs.length; k++) {
+        s = br.segs[k];
+        L = 0;
+        for (i = 1; i < s.length; i++) {
+          L += Math.hypot(s[i][0] - s[i - 1][0], s[i][1] - s[i - 1][1]);
+        }
+        if (L > best) { best = L; br._main = k; }
+      }
+      br._tlen = best;
+    }
+    ctx.strokeStyle = color;
+    for (k = 0; k < br.segs.length; k++) {
+      if (k === br._main) continue;
+      ctx.beginPath();
+      traceSeg(ctx, br.segs[k], view, 0);
+      ctx.lineWidth = TAPER_SRC + bonus;
+      ctx.stroke();
+    }
+    s = br.segs[br._main];
+    var span = (br.lw || 2) - TAPER_SRC;
+    var acc = 0, chunkW = TAPER_SRC;
+    ctx.beginPath();
+    ctx.moveTo(s[0][0] * view.scale + view.tx, s[0][1] * view.scale + view.ty);
+    for (i = 1; i < s.length; i++) {
+      acc += Math.hypot(s[i][0] - s[i - 1][0], s[i][1] - s[i - 1][1]);
+      ctx.lineTo(s[i][0] * view.scale + view.tx, s[i][1] * view.scale + view.ty);
+      var w = TAPER_SRC + span * (acc / br._tlen);
+      if (w - chunkW >= 0.18 || i === s.length - 1) {
+        ctx.lineWidth = chunkW + bonus;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(s[i][0] * view.scale + view.tx, s[i][1] * view.scale + view.ty);
+        chunkW = w;
+      }
+    }
   }
 
   /* A bridge too small on screen is drawn as a dot marker instead. */

@@ -7,9 +7,12 @@
 
   App.createFeatureQuiz = function (getItems, opts) {
 
-  // Pick radii in screen px; city-dot quizzes widen them a little
-  var HOVER_PX = (opts && opts.hoverPx) || 12;
-  var CLICK_PX = (opts && opts.clickPx) || 16;
+  // Pick radius in screen px — ONE radius shared by hover and clicks, so
+  // the hover highlight is exactly what a click will select: a click where
+  // nothing highlights must never hit. City-dot quizzes widen it a little.
+  var PICK_PX = (opts && opts.pickPx) || 16;
+  // First-try success color override (lakes turn water-blue, not green)
+  var CORRECT1 = (opts && opts.correct1Key) || "correct1";
 
   var game = {
     active: false,
@@ -56,10 +59,6 @@
     return d;
   }
 
-  function hitsBridge(b, wx, wy, tol) {
-    return bridgeDist(b, wx, wy) <= tol;
-  }
-
   /* The NEAREST unanswered feature within tolerance, or -1 — with a generous
      radius, neighboring canal footbridges must resolve to the closest one.
      Distance ties (nested parks: a garden inside a park) go to the SMALLEST
@@ -80,40 +79,61 @@
     return bestId;
   }
 
+  /* Distance to the nearest already-answered feature within tolerance,
+     or Infinity. */
+  function answeredDist(wx, wy, tol) {
+    var items = getItems(), best = Infinity;
+    game.colors.forEach(function (_, id) {
+      var d = bridgeDist(items[id], wx, wy);
+      if (d <= tol && d < best) best = d;
+    });
+    return best;
+  }
+
+  /* THE pick resolution, shared by hover, clicks and guided reveals. The
+     asked target wins overlaps and distance ties (a shared transit corridor
+     resolves to the asked line; a lone city dot attracts nearby clicks) but
+     never a click that lands strictly nearer something else: that resolves
+     to the nearer feature — or to a no-op when it is already answered, so
+     a done dot soaks up its own clicks instead of crediting the target. */
+  function pickAt(target, wx, wy, tol) {
+    var hit = bridgeAt(wx, wy, tol);
+    var td = bridgeDist(target, wx, wy);
+    if (td > tol) return hit;
+    var hd = (hit < 0 || hit === target.id) ? Infinity
+      : bridgeDist(getItems()[hit], wx, wy);
+    var ad = answeredDist(wx, wy, tol);
+    if (td <= Math.min(hd, ad) + 1) return target.id;
+    return hd <= ad + 1 ? hit : -1;
+  }
+
   function onHover(wx, wy) {
+    if (game.phase !== "await" && game.phase !== "guided") {
+      App.renderer.setHoverFeat(-1);
+      return;
+    }
+    var target = getItems()[game.items[game.idx].ids[0]];
+    var hit = wx === null ? -1 : pickAt(target, wx, wy, PICK_PX / App.view.scale);
     if (game.phase === "guided") {
       App.renderer.setHoverFeat(-1);
-      App.renderer.setGuideHover(wx !== null &&
-        hitsBridge(getItems()[game.items[game.idx].ids[0]], wx, wy,
-          HOVER_PX / App.view.scale));
+      App.renderer.setGuideHover(hit === target.id);
       return;
     }
-    if (wx === null || game.phase !== "await") { App.renderer.setHoverFeat(-1); return; }
-    var tol = HOVER_PX / App.view.scale;
-    // Target-first, like clicks: on a shared corridor the ASKED line
-    // highlights, showing exactly what a click there will select.
-    var target = getItems()[game.items[game.idx].ids[0]];
-    if (hitsBridge(target, wx, wy, tol)) {
-      App.renderer.setHoverFeat(target.id);
-      return;
-    }
-    App.renderer.setHoverFeat(bridgeAt(wx, wy, tol));
+    App.renderer.setHoverFeat(hit);
   }
 
   function onClick(wx, wy, cx, cy) {
     if (game.phase !== "await" && game.phase !== "guided") return;
-    var tol = CLICK_PX / App.view.scale;
     var item = game.items[game.idx];
     var target = getItems()[item.ids[0]];
+    var hit = pickAt(target, wx, wy, PICK_PX / App.view.scale);
     if (game.phase === "guided") {
-      if (hitsBridge(target, wx, wy, tol)) completeReveal(item);
+      if (hit === target.id) completeReveal(item);
       return;
     }
-    // Target-first: overlapping bridges resolve in the asked one's favor
-    var hit = hitsBridge(target, wx, wy, tol) ? target.id : bridgeAt(wx, wy, tol);
     if (hit < 0) return;
     if (hit === target.id) {
-      var color = "correct" + (game.attempts + 1);
+      var color = game.attempts ? "correct" + (game.attempts + 1) : CORRECT1;
       game.colors.set(target.id, color);
       item.result = game.attempts;
       game.points += 3 - game.attempts;
@@ -241,11 +261,23 @@
   App.parkgame = App.createFeatureQuiz(function () { return App.data.parks; });
   // Latvia city dots (LATVIA_DATA.cities / cities5k); items are tiny rings,
   // so they render and hit-test as dot markers at any sane zoom
-  var CITY_PICK = { hoverPx: 16, clickPx: 22 };
+  var CITY_PICK = { pickPx: 22 };
   App.lvCityGame = App.createFeatureQuiz(function () { return App.data.cities || []; },
     CITY_PICK);
   App.lvCityGame5k = App.createFeatureQuiz(function () { return App.data.cities5k || []; },
     CITY_PICK);
+  App.lvCityGameAll = App.createFeatureQuiz(function () { return App.data.citiesAll || []; },
+    CITY_PICK);
+  // Latvia countrywide feature quizzes; castles are dots like the cities,
+  // the rest are lines (rivers/roads) and areas (lakes/nature)
+  App.lvRiverGame = App.createFeatureQuiz(function () { return App.data.rivers || []; });
+  App.lvLakeGame = App.createFeatureQuiz(function () { return App.data.lakes || []; },
+    { correct1Key: "correctBlue" });
+  App.lvRoadGame = App.createFeatureQuiz(function () { return App.data.roads || []; });
+  App.lvCastleGame = App.createFeatureQuiz(function () { return App.data.castles || []; },
+    CITY_PICK);
+  App.lvNatureGame = App.createFeatureQuiz(function () { return App.data.nature || []; });
+  App.lvRegionGame = App.createFeatureQuiz(function () { return App.data.regions || []; });
   App.transitGames = {
     tram: App.createFeatureQuiz(function () { return App.data.transit.tram; }),
     trolleybus: App.createFeatureQuiz(function () { return App.data.transit.trolleybus; }),

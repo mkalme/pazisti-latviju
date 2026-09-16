@@ -64,9 +64,11 @@ pipeline. UI text is English; all object names are Latvian (UTF-8 diacritics).
     dimension is under ~3.5 bands (long-thin Jūrmala needs it as much as
     little Ogre); anything wider — Rīga always, others once zoomed in —
     picks exactly, so bands never swallow the novadi wedged against Rīga.
-  - `js/featgame.js` — `App.createFeatureQuiz(getItems)` factory →
+  - `js/featgame.js` — `App.createFeatureQuiz(getItems, opts)` factory →
     `bridgegame`, `parkgame`, `App.transitGames.{tram,trolleybus,busday,busnight,rail}`,
-    and `lvCityGame` (kind `lvcities`: LATVIA_DATA.cities dot markers).
+    and the Latvia instances `lvCityGame`/`lvCityGame5k` (dot markers,
+    `CITY_PICK` radius), `lvRiverGame`/`lvRoadGame` (lines),
+    `lvLakeGame`/`lvNatureGame` (areas), `lvCastleGame` (dots).
 - `js/levels.js` — derives levels from data: specials (majors/all/hoods/
   bridges/parks), transport, 58 per-neighborhood street levels.
 - `js/ui.js` — menu card grid w/ canvas thumbnails (cached per theme),
@@ -113,8 +115,28 @@ parks/transit are empty, `water` is a curated named-lakes/rivers set
 the map), and `cities`/`cities5k` hold the dot-quiz targets in two population
 tiers (place=city|town nodes filtered by `TIER_10K`/`TIER_5K`; each is a
 tiny 12-gon ring so featgame/renderer treat it as a dot marker — the
-lists themselves are never hardcoded). City-dot quizzes use widened pick
-radii (`CITY_PICK` in featgame.js) and larger dots on `land` maps. Hard-won policies:
+lists themselves are never hardcoded). City-dot quizzes use a widened pick
+radius (`CITY_PICK` in featgame.js) and larger dots on `land` maps.
+Countrywide feature-quiz keys, all OSM-derived with curation constants
+beside their code: `rivers` (named waterway ways grouped per river —
+Daugava/Gauja have NO whole-river relations, so ways are the uniform
+source; `RIVER_TOL`), `lakes` (top `TOP_LAKES` by ring area from the
+broad water fetch, reservoirs excluded, bilingual border names trimmed
+at " / "), `roads` (A1–A15 by strict ref regex; the hint is the most
+frequent dashed itinerary name, falling back to apvedceļš/šoseja names —
+plain "most common name" would pick town streets like "Rīgas iela"),
+`castles` (historic=castle dots minus `CASTLE_DROP` pattern —
+muiža/skansts/cietoksnis parts/tornis/pilskalns/… — and
+`CASTLE_EXCLUDE`), `nature` (4 national parks + 4 dabas rezervāti by
+NAME pattern with relations preferred over same-named ways: Slītere NP
+is a boundary way, and legacy core-zone rezervāts polygons inside the
+NPs sit in `NATURE_EXCLUDE`), `regions` (the 5 kultūrvēsturiskās zemes:
+`boundary=traditional` relations — NOT the same-named statistical
+regions or villages). Decor `water` = every named body over
+`MIN_WATER_AREA`. Feature
+quizzes share ONE hover+click radius and one `pickAt` resolution (hover
+shows exactly what a click selects; the asked target wins ties/overlaps but
+never beats a strictly nearer feature). Hard-won policies:
 - Units are OSM **admin_level=5** relations (7 valstspilsētas + 35 novadi;
   counts asserted — Varakļānu novads is gone since 2025, never hardcode the
   list). The 3 titular state cities (Jēkabpils, Ogre, Valmiera) are
