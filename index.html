@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Riga Streets</title>
+<script>
+/* Apply the saved theme before first paint to avoid a light flash */
+try {
+  var t = (JSON.parse(localStorage.getItem("rigaStreets.prefs")) || {}).theme;
+  if (!t && matchMedia("(prefers-color-scheme: dark)").matches) t = "dark";
+  if (t) document.documentElement.dataset.theme = t;
+} catch (e) {}
+</script>
+<link rel="stylesheet" href="css/style.css?v=16">
+</head>
+<body>
+
+<canvas id="map"></canvas>
+
+<div id="tooltip" class="hidden"></div>
+
+<div id="nodata" class="hidden panel">
+  <h1>Riga Streets</h1>
+  <p>Game data not found. Generate it first:</p>
+  <pre>python3 tools/fetch_osm.py
+python3 tools/build_data.py</pre>
+  <p>then reload this page.</p>
+</div>
+
+<div id="menu" class="screen hidden">
+  <div class="panel menu-panel">
+    <h1>Riga Streets</h1>
+    <p class="subtitle">The game names a street — click it on the map.
+      Green: first try. Yellow: second. Orange: third. Red: revealed.</p>
+    <button id="btn-study" class="btn btn-wide">🔍 Study the map</button>
+    <h2>Citywide</h2>
+    <div id="menu-specials" class="level-list"></div>
+    <h2>Public transport</h2>
+    <div id="menu-transport" class="level-list"></div>
+    <h2>Neighborhoods</h2>
+    <input id="hood-search" type="search" placeholder="Search neighborhoods…"
+           autocomplete="off" spellcheck="false">
+    <div id="hood-none" class="hood-none hidden">No neighborhood matches</div>
+    <div id="menu-hoods" class="level-list"></div>
+  </div>
+</div>
+
+<div id="hud" class="hidden">
+  <div class="hud-bar">
+    <button id="btn-quit" class="btn btn-small">‹ Menu</button>
+    <div id="prompt">Click: <b id="prompt-name"></b> <span id="prompt-hint"></span></div>
+    <div id="progress" class="hud-stat"></div>
+    <div id="timer" class="hud-stat"></div>
+    <button id="btn-skip" class="btn btn-small" title="Give up on this street (S)">Skip</button>
+  </div>
+</div>
+
+<div id="study-bar" class="hidden">
+  <div class="hud-bar">
+    <button id="btn-study-back" class="btn btn-small">‹ Menu</button>
+    <div class="hud-title">Study mode — hover for names, click to pin</div>
+    <label class="toggle"><input type="checkbox" id="study-districts"> Districts</label>
+    <label class="toggle"><input type="checkbox" id="study-shade"> Shading</label>
+    <label class="toggle"><input type="checkbox" id="study-majors"> Majors only</label>
+  </div>
+</div>
+
+<div id="summary" class="screen hidden">
+  <div class="panel summary-panel">
+    <h1 id="sum-title"></h1>
+    <div class="sum-score-row">
+      <div id="sum-score"></div>
+      <div id="sum-best" class="badge hidden">New best!</div>
+    </div>
+    <p id="sum-detail"></p>
+    <div id="sum-missed-wrap">
+      <h2><span id="sum-missed-word">Missed streets</span>
+        <span class="hint">(hover to flash on the map)</span></h2>
+      <ul id="sum-missed"></ul>
+    </div>
+    <div class="btn-row">
+      <button id="sum-again" class="btn">Play again</button>
+      <button id="sum-study" class="btn">Study this area</button>
+      <button id="sum-menu" class="btn">Menu</button>
+    </div>
+  </div>
+</div>
+
+<div id="corner-controls">
+  <button id="btn-theme" class="corner-btn" title="Light/dark theme">🌙</button>
+  <button id="btn-sound" class="corner-btn" title="Sound on/off">🔊</button>
+</div>
+
+<div id="attribution">Map data © <a href="https://www.openstreetmap.org/copyright"
+  target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
+
+<script src="data/riga_data.js?v=16"></script>
+<script src="js/geometry.js?v=16"></script>
+<script src="js/spatial.js?v=16"></script>
+<script src="js/view.js?v=16"></script>
+<script src="js/renderer.js?v=16"></script>
+<script src="js/levels.js?v=16"></script>
+<script src="js/storage.js?v=16"></script>
+<script src="js/sound.js?v=16"></script>
+<script src="js/study.js?v=16"></script>
+<script src="js/game.js?v=16"></script>
+<script src="js/hoodgame.js?v=16"></script>
+<script src="js/featgame.js?v=16"></script>
+<script src="js/ui.js?v=16"></script>
+<script src="js/main.js?v=16"></script>
+</body>
+</html>

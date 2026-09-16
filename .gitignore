@@ -1,0 +1,3 @@
+# Cached raw OSM downloads — large and refetchable (tools/fetch_osm.py)
+data/raw/
+__pycache__/
