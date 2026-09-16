@@ -15,7 +15,11 @@
     onChange: null,
     onClick: null,   // (worldX, worldY, clientX, clientY)
     onHover: null,   // (worldX, worldY, clientX, clientY) or (null) when leaving
-    bounds: null
+    bounds: null,
+    lastFit: null,   // bbox of the most recent fitBbox — "Reset view" target
+    topInset: 0,     // px hidden under the top HUD/study bar; fits avoid it
+    panLock: false,  // settings: ignore USER pan/zoom input; programmatic
+    zoomLock: false  //   moves (fitBbox, centerOn, reveals) still work
   };
 
   view.worldToScreen = function (x, y) {
@@ -41,12 +45,14 @@
 
   view.fitBbox = function (bbox, padFrac) {
     padFrac = padFrac === undefined ? 0.08 : padFrac;
+    view.lastFit = bbox;
     var w = Math.max(1, bbox[2] - bbox[0]);
     var h = Math.max(1, bbox[3] - bbox[1]);
-    var s = Math.min(view.cssW / (w * (1 + 2 * padFrac)), view.cssH / (h * (1 + 2 * padFrac)));
+    var availH = Math.max(50, view.cssH - view.topInset);
+    var s = Math.min(view.cssW / (w * (1 + 2 * padFrac)), availH / (h * (1 + 2 * padFrac)));
     view.scale = clampScale(s);
     view.tx = view.cssW / 2 - (bbox[0] + w / 2) * view.scale;
-    view.ty = view.cssH / 2 - (bbox[1] + h / 2) * view.scale;
+    view.ty = view.topInset + availH / 2 - (bbox[1] + h / 2) * view.scale;
     changed();
   };
 
@@ -57,6 +63,7 @@
   };
 
   function zoomAt(sx, sy, factor) {
+    if (view.zoomLock) return;
     var ns = clampScale(view.scale * factor);
     if (ns === view.scale) return;
     var w = view.screenToWorld(sx, sy);
@@ -67,6 +74,19 @@
   }
   view.zoomAt = zoomAt;
 
+  function updateMinScale() {
+    if (!view.bounds || !(view.cssW > 0)) return;
+    var w = view.bounds[2] - view.bounds[0], h = view.bounds[3] - view.bounds[1];
+    view.minScale = 0.8 * Math.min(view.cssW / w, view.cssH / h);
+  }
+
+  /* Swap the world bounds (dataset switch): minScale must follow, or a map
+     larger than the previous one can never fit on screen. */
+  view.setBounds = function (bounds) {
+    view.bounds = bounds;
+    updateMinScale();
+  };
+
   view.resize = function () {
     var c = view.canvas;
     view.cssW = c.clientWidth;
@@ -75,8 +95,7 @@
     c.width = Math.round(view.cssW * dpr);
     c.height = Math.round(view.cssH * dpr);
     if (view.bounds) {
-      var w = view.bounds[2] - view.bounds[0], h = view.bounds[3] - view.bounds[1];
-      view.minScale = 0.8 * Math.min(view.cssW / w, view.cssH / h);
+      updateMinScale();
       // First real layout after a zero-size init (e.g. hidden pane): fit the map
       if (view.cssW > 0 && (!isFinite(view.scale) || view.scale <= 0)) {
         view.fitBbox(view.bounds);
@@ -122,6 +141,7 @@
         var prev = pointers.get(e.pointerId);
         pointers.set(e.pointerId, p);
         if (pointers.size === 1) {
+          if (view.panLock) return; // locked: every press stays a click
           // Drag slop: fast clicks carry a few px of jitter — the map must
           // not pan until the pointer clearly leaves the press point.
           if (!moved) {

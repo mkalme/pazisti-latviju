@@ -59,6 +59,32 @@
     featLevel(transport, tr.busDay, "busday", "Buses (day)", "click the route");
     featLevel(transport, tr.busNight, "busnight", "Buses (night)", "click the route");
     featLevel(transport, tr.rail, "rail", "Train lines", "click the corridor");
+    // Countrywide Latvia level — its own dataset, swapped in by startGame.
+    // Guarded: the page still works if data/latvia_data.js is absent.
+    var latvia = [];
+    if (window.LATVIA_DATA) {
+      var lv = window.LATVIA_DATA;
+      latvia.push({ id: "lv:all", kind: "latvia",
+        name: "State cities & municipalities",
+        note: "all of Latvia · click the territory", hoodId: -1,
+        ids: lv.hoods.map(function (h) { return h.id; }),
+        itemCount: lv.hoods.length, bbox: lv.meta.bounds, ds: lv });
+      if (lv.cities && lv.cities.length) {
+        latvia.push({ id: "lv:cities10k", kind: "lvcities",
+          name: "Cities over 10 000",
+          note: "all of Latvia · click the dot", hoodId: -1,
+          ids: lv.cities.map(function (c) { return c.id; }),
+          itemCount: lv.cities.length, bbox: lv.meta.bounds, ds: lv });
+      }
+      if (lv.cities5k && lv.cities5k.length) {
+        latvia.push({ id: "lv:cities5k", kind: "lvcities5k",
+          name: "Cities over 5 000",
+          note: "all of Latvia · click the dot", hoodId: -1,
+          ids: lv.cities5k.map(function (c) { return c.id; }),
+          itemCount: lv.cities5k.length, bbox: lv.meta.bounds, ds: lv });
+      }
+    }
+
     var collator = new Intl.Collator("lv");
     var hoods = data.hoods.slice().sort(function (a, b) {
       return collator.compare(a.name, b.name);
@@ -72,7 +98,7 @@
       l.itemCount = countNames(data, l.ids);
       l.bbox = l.hoodId >= 0 ? data.hoods[l.hoodId].bbox : bboxOfIds(data, l.ids);
     });
-    return { specials: specials, transport: transport, hoods: hoods };
+    return { specials: specials, transport: transport, latvia: latvia, hoods: hoods };
   }
 
   App.levels = { build: build };

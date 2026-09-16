@@ -26,21 +26,20 @@
     return arr;
   }
 
-  function buildItems() {
-    return shuffle(App.data.hoods.map(function (h) {
-      return { name: h.name, ids: [h.id], hint: "", result: -1 };
+  function buildItems(level) {
+    var hoods = App.data.hoods;
+    var ids = level.ids || hoods.map(function (h) { return h.id; });
+    return shuffle(ids.map(function (id) {
+      return { name: hoods[id].name, ids: [id], hint: "", result: -1 };
     }));
   }
 
-  /* The unanswered hood containing the point, or -1. */
+  /* The unanswered hood under (or, for cities, near) the point, most
+     specific first, or -1. */
   function hoodAt(wx, wy) {
-    var hoods = App.data.hoods;
-    for (var i = 0; i < hoods.length; i++) {
-      var h = hoods[i];
-      if (game.colors.has(h.id)) continue;
-      var b = h.bbox;
-      if (wx < b[0] || wx > b[2] || wy < b[1] || wy > b[3]) continue;
-      if (App.geom.pointInRings(h.rings, wx, wy)) return h.id;
+    var hits = App.geom.hoodsAt(App.data.hoods, wx, wy, App.geom.cityPickTol());
+    for (var i = 0; i < hits.length; i++) {
+      if (!game.colors.has(hits[i])) return hits[i];
     }
     return -1;
   }
@@ -62,10 +61,16 @@
   }
 
   function clickedTarget(item, wx, wy) {
-    var target = App.data.hoods[item.ids[0]];
-    var b = target.bbox;
-    return wx >= b[0] && wx <= b[2] && wy >= b[1] && wy <= b[3] &&
-      App.geom.pointInRings(target.rings, wx, wy);
+    var hoods = App.data.hoods;
+    var hits = App.geom.hoodsAt(hoods, wx, wy, App.geom.cityPickTol());
+    if (!hits.length) return false;
+    var targetId = item.ids[0];
+    if (hits[0] === targetId) return true;
+    // Target-first exists so the asked hood wins shared-border slivers —
+    // but a state city outranking the pick (exact hit or magnetic band)
+    // is a genuine different answer, not a sliver: the city takes the
+    // click even when the asked novads is under the cursor too.
+    return hits.indexOf(targetId) >= 0 && !hoods[hits[0]].city;
   }
 
   function onClick(wx, wy, cx, cy) {
@@ -121,6 +126,7 @@
     App.renderer.setGuideHover(false);
     App.renderer.revealLabel = null;
     App.renderer.invalidate();
+    App.sound.play("tick");
     advance();
   }
 
@@ -153,7 +159,7 @@
     game.stop();
     game.active = true;
     game.level = level;
-    game.items = buildItems();
+    game.items = buildItems(level);
     game.idx = 0;
     game.attempts = 0;
     game.points = 0;

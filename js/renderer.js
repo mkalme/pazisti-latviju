@@ -6,6 +6,8 @@
   var LIGHT = {
     bg: "#f7f4ee",
     water: "#b9d6e2",
+    land: "#e9e3d5",
+    landLine: "#8f8571",
     hoodLine: "rgba(90, 80, 60, 0.13)",
     hoodStrong: "rgba(90, 80, 60, 0.55)",
     activeHoodFill: "rgba(37, 99, 235, 0.045)",
@@ -26,6 +28,8 @@
   var DARK = {
     bg: "#14171c",
     water: "#1e3644",
+    land: "#252c35",
+    landLine: "#7b828c",
     hoodLine: "rgba(255, 255, 255, 0.09)",
     hoodStrong: "rgba(255, 255, 255, 0.45)",
     activeHoodFill: "rgba(96, 165, 250, 0.06)",
@@ -157,6 +161,23 @@
       (bw - bview.tx) / scale, (bh - bview.ty) / scale
     ];
 
+    // Country dataset (Latvia): opaque land fill per unit over the plain bg
+    // (sea and foreign land both stay bg — no offshore water band). Fills
+    // are per-unit (not one batched even-odd path) so the carved titular
+    // cities overpaint their parent novadi; enclave holes still work
+    // because each unit fills even-odd.
+    var h, hood;
+    if (data.land) {
+      ctx.fillStyle = COLORS.land;
+      for (h = 0; h < data.hoods.length; h++) {
+        hood = data.hoods[h];
+        if (!App.geom.bboxIntersects(hood.bbox, cull)) continue;
+        ctx.beginPath();
+        traceRings(ctx, hood.rings, bview);
+        ctx.fill("evenodd");
+      }
+    }
+
     // Water: all bodies are disjoint, so one batched even-odd fill
     ctx.beginPath();
     for (var w = 0; w < data.water.length; w++) {
@@ -166,7 +187,6 @@
     ctx.fill("evenodd");
 
     // Neighborhood shading (study mode): per-hood tints
-    var h, hood;
     if (cfg.shadeHoods) {
       for (h = 0; h < data.hoods.length; h++) {
         hood = data.hoods[h];
@@ -191,7 +211,10 @@
         ctx.fill("evenodd");
         ctx.globalAlpha = 0.9;
         ctx.strokeStyle = resolve(hcolor);
-        ctx.lineWidth = 1.5;
+        // Land map: answered outlines match the hairline base borders in
+        // DEVICE px, or at browser zoom they'd read double-thick where
+        // two answered neighbors share a border.
+        ctx.lineWidth = data.land ? 1.25 / res : 1.5;
         ctx.stroke();
         ctx.globalAlpha = 1;
       }
@@ -203,8 +226,15 @@
       if (hood.id === cfg.activeHood || !App.geom.bboxIntersects(hood.bbox, cull)) continue;
       traceRings(ctx, hood.rings, bview);
     }
-    ctx.strokeStyle = cfg.hoodQuiz ? COLORS.hoodStrong : COLORS.hoodLine;
-    ctx.lineWidth = cfg.hoodQuiz ? 2 : 1;
+    // The Latvia map is dense with borders: a SOLID line sized in DEVICE
+    // pixels reads crisp (translucent hoodStrong at fractional widths goes
+    // fuzzy), and browser zoom — which raises dpr/res — must not fatten
+    // it with the rest of the page. 1.25 device px, not 1: antialiasing
+    // splits an exact 1 px stroke across two half-covered rows (blur); a
+    // quarter more gives it a fully solid core.
+    ctx.strokeStyle = data.land && cfg.hoodQuiz ? COLORS.landLine
+      : cfg.hoodQuiz ? COLORS.hoodStrong : COLORS.hoodLine;
+    ctx.lineWidth = data.land ? 1.25 / res : cfg.hoodQuiz ? 2 : 1;
     ctx.stroke();
     if (cfg.activeHood >= 0) {
       hood = data.hoods[cfg.activeHood];
@@ -286,8 +316,9 @@
       ctx.stroke();
     }
     // Neighborhoods quiz: re-stroke district borders ON TOP of the street
-    // layer, so they stay the dominant shapes to aim at.
-    if (cfg.hoodQuiz) {
+    // layer, so they stay the dominant shapes to aim at. Pointless without
+    // streets (Latvia) — it would only double-darken the borders.
+    if (cfg.hoodQuiz && data.streets.length) {
       ctx.beginPath();
       for (h = 0; h < data.hoods.length; h++) {
         hood = data.hoods[h];
@@ -310,9 +341,12 @@
         var bcol = resolve(bkey || "neutral");
         if (bridgeSmall(br, scale)) {
           var ba = App.geom.bridgeAnchor(br);
+          // City dots on the country map are the whole target — draw them
+          // larger than Riga's incidental bridge markers
+          var dotR = data.land ? (bkey ? 7 : 6) : (bkey ? 6 : 5);
           ctx.beginPath();
           ctx.arc(ba[0] * scale + bview.tx, ba[1] * scale + bview.ty,
-                  bkey ? 6 : 5, 0, Math.PI * 2);
+                  dotR, 0, Math.PI * 2);
           ctx.fillStyle = bcol;
           ctx.fill();
           ctx.strokeStyle = COLORS.bg;
@@ -370,7 +404,8 @@
       var a = App.geom.bridgeAnchor(br);
       ctx.beginPath();
       ctx.arc(a[0] * view.scale + view.tx, a[1] * view.scale + view.ty,
-              Math.max(6, width * 0.8), 0, Math.PI * 2);
+              Math.max(renderer.data && renderer.data.land ? 8 : 6, width * 0.8),
+              0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
       ctx.strokeStyle = COLORS.bg;
@@ -518,10 +553,11 @@
     renderer.flashes = alive;
 
     // Guided reveal: the missed answer pulses until the player clicks it;
-    // hovering it goes steady in the hover color to read as clickable
+    // hovering it goes steady in the hover color to read as clickable.
+    // The reveal label below shares this alpha so it pulses in sync.
+    var ga = renderer.guideHover
+      ? 0.9 : 0.4 + 0.35 * Math.abs(Math.sin(now / 200));
     if (renderer.guide) {
-      var ga = renderer.guideHover
-        ? 0.9 : 0.4 + 0.35 * Math.abs(Math.sin(now / 200));
       var gcolor = resolve(renderer.guideHover ? "hover" : "missed");
       if (renderer.guide.hood != null) {
         ctx.beginPath();
@@ -559,6 +595,7 @@
       drawHoodLabel(ctx, data.hoods[renderer.hoodPins[hp]], view);
     }
     if (renderer.revealLabel) {
+      if (renderer.guide) ctx.globalAlpha = ga; // pulse with the shape
       if (renderer.revealLabel.hood != null) {
         drawHoodLabel(ctx, data.hoods[renderer.revealLabel.hood], view);
       } else if (renderer.revealLabel.featItems) {
@@ -571,6 +608,7 @@
           drawLabel(ctx, data.streets[renderer.revealLabel.ids[r]], view);
         }
       }
+      ctx.globalAlpha = 1;
     }
   }
 

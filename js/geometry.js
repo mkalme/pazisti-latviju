@@ -101,6 +101,55 @@
     return hood._anchor;
   }
 
+  /* Screen-space pick radius for state cities, in world meters. A small
+     city is ~10 px at country zoom and its stroked border is a big share
+     of that, so picks get magnetic within this band around its boundary.
+     The world-space cap keeps narrow viewports (phones) honest: without
+     it a 10 px band at their coarse fit scale spans >10 km, swallowing
+     the small novadi around Rīga — and the size gate along with them. */
+  function cityPickTol() {
+    return Math.min(10 / App.view.scale, 4000);
+  }
+
+  function bySize(a, b) {
+    return (a.bbox[2] - a.bbox[0]) + (a.bbox[3] - a.bbox[1])
+      - (b.bbox[2] - b.bbox[0]) - (b.bbox[3] - b.bbox[1]);
+  }
+
+  /* Units under — or, for `city`-flagged units, within cityTol of — the
+     point, most specific first. Ranking: exact-hit cities (smallest
+     first), then cities whose boundary is within cityTol (nearest first),
+     then exact non-city hits (smallest first). A near city outranks the
+     novads under the cursor, but never a city the point is actually
+     inside. Without city flags (Riga) this is plain smallest-bbox-first
+     containment, the same tie-break philosophy as spatial.pick. */
+  function hoodsAt(hoods, x, y, cityTol) {
+    var exactCity = [], nearCity = [], exactOther = [];
+    for (var i = 0; i < hoods.length; i++) {
+      var h = hoods[i], b = h.bbox;
+      // The band exists to make hard-to-click polygons hittable, and what
+      // makes one hard is its NARROW dimension: long-thin Jūrmala (9 km
+      // tall) needs the band as much as round little Ogre, while Rīga
+      // (24 km at its narrowest, or anything zoomed in past ~3.5 bands)
+      // picks exactly — so bands never swallow the novadi wedged against
+      // Rīga.
+      var tol = cityTol && h.city &&
+        Math.min(b[2] - b[0], b[3] - b[1]) < cityTol * 3.5 ? cityTol : 0;
+      if (x < b[0] - tol || x > b[2] + tol || y < b[1] - tol || y > b[3] + tol) continue;
+      if (pointInRings(h.rings, x, y)) {
+        (h.city ? exactCity : exactOther).push(h);
+      } else if (tol > 0) {
+        var d = distToRings(h.rings, x, y);
+        if (d <= tol) nearCity.push({ h: h, d: d });
+      }
+    }
+    exactCity.sort(bySize);
+    exactOther.sort(bySize);
+    nearCity.sort(function (a, b2) { return a.d - b2.d; });
+    return exactCity.concat(nearCity.map(function (n) { return n.h; }), exactOther)
+      .map(function (h) { return h.id; });
+  }
+
   function distToRings(rings, x, y) {
     var best = Infinity;
     for (var r = 0; r < rings.length; r++) {
@@ -123,6 +172,8 @@
     bboxIntersects: bboxIntersects,
     labelAnchor: labelAnchor,
     pointInRings: pointInRings,
+    hoodsAt: hoodsAt,
+    cityPickTol: cityPickTol,
     hoodAnchor: hoodAnchor,
     distToRings: distToRings,
     bridgeAnchor: bridgeAnchor

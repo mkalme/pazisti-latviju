@@ -12,7 +12,7 @@ try {
   if (t) document.documentElement.dataset.theme = t;
 } catch (e) {}
 </script>
-<link rel="stylesheet" href="css/style.css?v=16">
+<link rel="stylesheet" href="css/style.css?v=30">
 </head>
 <body>
 
@@ -38,6 +38,8 @@ python3 tools/build_data.py</pre>
     <div id="menu-specials" class="level-list"></div>
     <h2>Public transport</h2>
     <div id="menu-transport" class="level-list"></div>
+    <h2 id="menu-latvia-h2">Latvia</h2>
+    <div id="menu-latvia" class="level-list"></div>
     <h2>Neighborhoods</h2>
     <input id="hood-search" type="search" placeholder="Search neighborhoods…"
            autocomplete="off" spellcheck="false">
@@ -52,6 +54,7 @@ python3 tools/build_data.py</pre>
     <div id="prompt">Click: <b id="prompt-name"></b> <span id="prompt-hint"></span></div>
     <div id="progress" class="hud-stat"></div>
     <div id="timer" class="hud-stat"></div>
+    <button id="btn-restart" class="btn btn-small" title="Restart this level">↻ Restart</button>
     <button id="btn-skip" class="btn btn-small" title="Give up on this street (S)">Skip</button>
   </div>
 </div>
@@ -89,25 +92,33 @@ python3 tools/build_data.py</pre>
 
 <div id="corner-controls">
   <button id="btn-theme" class="corner-btn" title="Light/dark theme">🌙</button>
-  <button id="btn-sound" class="corner-btn" title="Sound on/off">🔊</button>
+  <button id="btn-settings" class="corner-btn" title="Map & sound settings">⚙️</button>
+</div>
+
+<div id="settings-pop" class="hidden">
+  <label class="toggle"><input type="checkbox" id="set-pan" checked> Map panning</label>
+  <label class="toggle"><input type="checkbox" id="set-zoom" checked> Map zooming</label>
+  <label class="toggle"><input type="checkbox" id="set-sound" checked> Sound</label>
+  <button id="set-reset" class="btn btn-small">⟲ Reset view</button>
 </div>
 
 <div id="attribution">Map data © <a href="https://www.openstreetmap.org/copyright"
   target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
 
-<script src="data/riga_data.js?v=16"></script>
-<script src="js/geometry.js?v=16"></script>
-<script src="js/spatial.js?v=16"></script>
-<script src="js/view.js?v=16"></script>
-<script src="js/renderer.js?v=16"></script>
-<script src="js/levels.js?v=16"></script>
-<script src="js/storage.js?v=16"></script>
-<script src="js/sound.js?v=16"></script>
-<script src="js/study.js?v=16"></script>
-<script src="js/game.js?v=16"></script>
-<script src="js/hoodgame.js?v=16"></script>
-<script src="js/featgame.js?v=16"></script>
-<script src="js/ui.js?v=16"></script>
-<script src="js/main.js?v=16"></script>
+<script src="data/riga_data.js?v=30"></script>
+<script src="data/latvia_data.js?v=30"></script>
+<script src="js/geometry.js?v=30"></script>
+<script src="js/spatial.js?v=30"></script>
+<script src="js/view.js?v=30"></script>
+<script src="js/renderer.js?v=30"></script>
+<script src="js/levels.js?v=30"></script>
+<script src="js/storage.js?v=30"></script>
+<script src="js/sound.js?v=30"></script>
+<script src="js/study.js?v=30"></script>
+<script src="js/game.js?v=30"></script>
+<script src="js/hoodgame.js?v=30"></script>
+<script src="js/featgame.js?v=30"></script>
+<script src="js/ui.js?v=30"></script>
+<script src="js/main.js?v=30"></script>
 </body>
 </html>

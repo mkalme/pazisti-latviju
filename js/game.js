@@ -133,6 +133,7 @@
     App.renderer.setGuideHover(false);
     App.renderer.revealLabel = null;
     App.renderer.invalidate();
+    App.sound.play("tick");
     advance();
   }
 

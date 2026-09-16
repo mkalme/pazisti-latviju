@@ -16,13 +16,9 @@
   }
 
   function hoodAt(wx, wy) {
-    var hoods = App.data.hoods;
-    for (var i = 0; i < hoods.length; i++) {
-      var b = hoods[i].bbox;
-      if (wx < b[0] || wx > b[2] || wy < b[1] || wy > b[3]) continue;
-      if (App.geom.pointInRings(hoods[i].rings, wx, wy)) return hoods[i].id;
-    }
-    return -1;
+    // Most specific unit wins; state cities are magnetic near their border
+    var hits = App.geom.hoodsAt(App.data.hoods, wx, wy, App.geom.cityPickTol());
+    return hits.length ? hits[0] : -1;
   }
 
   function onHover(wx, wy, cx, cy) {
@@ -92,6 +88,15 @@
 
   study.enter = function (opts) {
     study.active = true;
+    // A streetless dataset (Latvia) has only the districts mode to offer
+    var noStreets = !App.data.streets.length;
+    var dEl = document.getElementById("study-districts");
+    var mEl = document.getElementById("study-majors");
+    dEl.disabled = mEl.disabled = noStreets;
+    if (noStreets) {
+      dEl.checked = true;
+      wasDistricts = true;
+    }
     if (opts && opts.districts) {
       document.getElementById("study-districts").checked = true;
       document.getElementById("study-shade").checked = true;

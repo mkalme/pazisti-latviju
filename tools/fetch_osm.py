@@ -4,6 +4,10 @@
 Downloads street geometry (one query per highway class), apkaime
 (neighborhood) boundaries and water polygons into data/raw/*.json.
 Files already present are skipped — delete a file to force a refresh.
+
+An optional name-prefix argument fetches only matching queries and skips
+the Riga sanity checks: `python3 tools/fetch_osm.py latvia_` grabs just
+the countrywide dataset for tools/build_latvia.py.
 """
 import json
 import sys
@@ -105,6 +109,49 @@ def queries():
         'relation(area.riga)["waterway"="riverbank"];'
         ");out geom qt;"
     )
+
+    # --- Latvia: countrywide state cities + municipalities quiz ---
+    # First-level units (valstspilsētas + novadi) are admin_level=5 in OSM;
+    # border_type separates city from municipality. 42 units post-2025.
+    lv = "area(3600072594)->.lv;"  # Latvia, OSM relation 72594
+    qs["latvia_admin"] = (
+        f'[out:json][timeout:600];{lv}'
+        'relation(area.lv)["boundary"="administrative"]["admin_level"="5"];'
+        "out geom qt;"
+    )
+    # The three titular state cities that are NOT separate first-level
+    # territories (Jēkabpils, Ogre, Valmiera): admin_level=7 city polygons,
+    # carved on top of their parent novadi by the builder.
+    qs["latvia_cities"] = (
+        f'[out:json][timeout:600];{lv}'
+        'relation(area.lv)["boundary"="administrative"]["admin_level"="7"]'
+        '["border_type"="city"];out geom qt;'
+    )
+    # Populated places for the city-dots quiz: place nodes carry population
+    # (filtered to the 10k+ threshold at build time, never hardcoded).
+    qs["latvia_places"] = (
+        f'[out:json][timeout:600];{lv}'
+        'node(area.lv)["place"~"^(city|town)$"]["population"];out qt;'
+    )
+    # Orientation water: curated big lakes + main river polygons. Many
+    # riverbank polygons carry no name tag, so rivers stay patchy — the
+    # lakes are the visual anchors at country zoom. Edit lists to taste.
+    lakes = ("Lubāns|Lubāna ezers|Rāznas ezers|Engures ezers|Burtnieks|"
+             "Burtnieku ezers|Usmas ezers|Liepājas ezers|Papes ezers|"
+             "Ķīšezers|Juglas ezers|Babītes ezers|Alūksnes ezers|Sīvers|"
+             "Lielais Ludzas ezers|Cirīša ezers|Kāla ezers")
+    rivers = ("Daugava|Lielupe|Venta|Gauja|Aiviekste|Salaca|Abava|Ogre|"
+              "Dubna|Bārta|Mēmele|Mūsa|Iecava")
+    qs["latvia_water"] = (
+        f'[out:json][timeout:600];{lv}('
+        f'way(area.lv)["natural"="water"]["name"~"^({lakes})$"];'
+        f'relation(area.lv)["natural"="water"]["name"~"^({lakes})$"];'
+        f'way(area.lv)["natural"="water"]["water"~"^(river|canal)$"]["name"~"^({rivers})$"];'
+        f'relation(area.lv)["natural"="water"]["water"~"^(river|canal)$"]["name"~"^({rivers})$"];'
+        f'way(area.lv)["waterway"="riverbank"]["name"~"^({rivers})$"];'
+        f'relation(area.lv)["waterway"="riverbank"]["name"~"^({rivers})$"];'
+        ");out geom qt;"
+    )
     return qs
 
 
@@ -127,9 +174,11 @@ def fetch(query, name):
     raise RuntimeError(f"all attempts failed for {name}")
 
 
-def main():
+def main(prefix=""):
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     for name, query in queries().items():
+        if prefix and not name.startswith(prefix):
+            continue
         path = RAW_DIR / f"{name}.json"
         if path.exists():
             print(f"{name}: cached ({path.stat().st_size / 1e6:.1f} MB)", flush=True)
@@ -142,6 +191,13 @@ def main():
         print(f"{name}: {len(body) / 1e6:.1f} MB in {time.time() - t0:.0f}s", flush=True)
         time.sleep(2)
 
+    if not prefix:
+        verify_riga()
+    if (RAW_DIR / "latvia_admin.json").exists():
+        verify_latvia()
+
+
+def verify_riga():
     total_ways = 0
     names = set()
     for cls in STREET_CLASSES:
@@ -168,5 +224,22 @@ def main():
         sys.exit("FATAL: data looks wrong, aborting")
 
 
+def verify_latvia():
+    lv = json.loads((RAW_DIR / "latvia_admin.json").read_text())
+    rels = [e for e in lv["elements"] if e["type"] == "relation"]
+    cities = sum(1 for r in rels
+                 if r.get("tags", {}).get("border_type") == "city")
+    print(f"LATVIA: {len(rels)} first-level units ({cities} state cities)")
+    if len(rels) != 42:
+        print(f"WARNING: expected 42 units (7 cities + 35 novadi post-2025), got {len(rels)}")
+    if len(rels) < 35 or cities < 5:
+        sys.exit("FATAL: latvia_admin looks wrong, aborting")
+    for extra in ("latvia_cities", "latvia_places", "latvia_water"):
+        path = RAW_DIR / f"{extra}.json"
+        if path.exists():
+            n = len(json.loads(path.read_text())["elements"])
+            print(f"  {extra}: {n} element(s)")
+
+
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1] if len(sys.argv) > 1 else "")

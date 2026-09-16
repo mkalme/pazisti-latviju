@@ -255,6 +255,22 @@ h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em;
 }
 .corner-btn:hover { background: var(--hover-bg); }
 
+#settings-pop {
+  position: fixed;
+  left: 10px;
+  bottom: 58px;
+  z-index: 16;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  box-shadow: 0 4px 18px var(--shadow);
+}
+#settings-pop .btn { margin-top: 3px; }
+
 #attribution {
   position: fixed;
   right: 8px;

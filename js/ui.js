@@ -12,12 +12,17 @@
   var thumbCanvasCache = new Map(); // "theme:levelId" -> rendered canvas
 
   /* Per-kind lookups: card unit, summary wording, feature dataset, thumb hue */
-  var KIND_UNIT = { hoods: " areas", bridges: " bridges", parks: " parks",
+  var KIND_UNIT = { hoods: " areas", latvia: " territories",
+    lvcities: " cities", lvcities5k: " cities",
+    bridges: " bridges", parks: " parks",
     tram: " lines", trolleybus: " lines", busday: " lines",
     busnight: " lines", rail: " lines" };
-  var KIND_MISSED = { hoods: "Missed neighborhoods", bridges: "Missed bridges",
+  var KIND_MISSED = { hoods: "Missed neighborhoods", latvia: "Missed territories",
+    lvcities: "Missed cities", lvcities5k: "Missed cities",
+    bridges: "Missed bridges",
     parks: "Missed parks", tram: "Missed lines", trolleybus: "Missed lines",
     busday: "Missed lines", busnight: "Missed lines", rail: "Missed lines" };
+  var KIND_POLY = { hoods: 1, latvia: 1 }; // polygon-quiz kinds (hoodgame engine)
   var TRANSIT_HUE = { tram: "hsla(0, 65%, 55%, 0.9)",
     trolleybus: "hsla(140, 50%, 45%, 0.9)", busday: "hsla(215, 65%, 55%, 0.9)",
     busnight: "hsla(270, 55%, 60%, 0.9)", rail: "hsla(0, 0%, 60%, 0.95)" };
@@ -25,6 +30,8 @@
   function featItemsFor(kind) {
     if (kind === "bridges") return App.data.bridges;
     if (kind === "parks") return App.data.parks;
+    if (kind === "lvcities") return App.data.cities;
+    if (kind === "lvcities5k") return App.data.cities5k;
     var key = { tram: "tram", trolleybus: "trolleybus", busday: "busDay",
                 busnight: "busNight", rail: "rail" }[kind];
     return key && App.data.transit ? App.data.transit[key] : null;
@@ -43,15 +50,20 @@
     els.hud.classList.toggle("hidden", name !== "game");
     els.studyBar.classList.toggle("hidden", name !== "study");
     els.summary.classList.add("hidden");
+    // Fits must not hide the map's top under the floating bar
+    var bar = name === "game" ? els.hud : name === "study" ? els.studyBar : null;
+    App.view.topInset = bar
+      ? Math.ceil(bar.querySelector(".hud-bar").getBoundingClientRect().bottom) : 0;
   }
 
   /* --- menu thumbnails: tiny city map, this level highlighted --- */
 
-  function thumbTransform(size) {
-    var b = App.data.meta.bounds;
+  function thumbTransform(size, data) {
+    var b = data.meta.bounds;
     var w = b[2] - b[0], h = b[3] - b[1];
     var s = (size * 0.92) / Math.max(w, h);
-    return { s: s, ox: (size - w * s) / 2, oy: (size - h * s) / 2 };
+    // Offset by the bbox origin: Latvia's bounds do not start at [0, 0]
+    return { s: s, ox: (size - w * s) / 2 - b[0] * s, oy: (size - h * s) / 2 - b[1] * s };
   }
 
   function traceRingsT(ctx, rings, t) {
@@ -71,7 +83,7 @@
     cv.width = cv.height = THUMB * dpr;
     var ctx = cv.getContext("2d");
     ctx.scale(dpr, dpr);
-    var t = thumbTransform(THUMB);
+    var t = thumbTransform(THUMB, App.data);
     ctx.beginPath();
     App.data.hoods.forEach(function (h) { traceRingsT(ctx, h.rings, t); });
     ctx.fillStyle = C.thumbBase;
@@ -87,13 +99,57 @@
     canvas.width = canvas.height = THUMB * dpr;
     canvas.style.width = canvas.style.height = THUMB + "px";
     var ctx = canvas.getContext("2d");
-    ctx.drawImage(thumbCache.canvas, 0, 0);
+    var data = level.ds || App.data;
+    if (!level.ds) ctx.drawImage(thumbCache.canvas, 0, 0); // Riga city base
     ctx.scale(dpr, dpr);
-    var t = thumbTransform(THUMB);
+    var t = thumbTransform(THUMB, data);
     var C = App.renderer.COLORS;
-    if (level.kind === "hoods") {
+    if (level.kind === "latvia") {
+      // Pastel mosaic like the Riga Neighborhoods card: every territory
+      // over the land base in its shading tint, water on top. Per-unit
+      // fills so enclave holes and carved cities tile correctly.
+      data.hoods.forEach(function (h) {
+        ctx.beginPath();
+        traceRingsT(ctx, h.rings, t);
+        ctx.fillStyle = C.thumbBase;
+        ctx.fill("evenodd");
+        ctx.fillStyle = "hsla(" + ((h.id * 47) % 360) + ", 45%, 55%, 0.45)";
+        ctx.fill("evenodd");
+        ctx.strokeStyle = C.hoodLine;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      });
+      ctx.beginPath();
+      data.water.forEach(function (w) { traceRingsT(ctx, w.rings, t); });
+      ctx.fillStyle = C.water;
+      ctx.fill("evenodd");
+    } else if (level.kind === "lvcities" || level.kind === "lvcities5k") {
+      // City-dot cards: land-filled units with borders, water, and an
+      // accent dot per quiz city.
+      data.hoods.forEach(function (h) {
+        ctx.beginPath();
+        traceRingsT(ctx, h.rings, t);
+        ctx.fillStyle = C.thumbBase;
+        ctx.fill("evenodd");
+        ctx.strokeStyle = C.hoodLine;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      });
+      ctx.beginPath();
+      data.water.forEach(function (w) { traceRingsT(ctx, w.rings, t); });
+      ctx.fillStyle = C.water;
+      ctx.fill("evenodd");
+      var dots = level.kind === "lvcities" ? data.cities : data.cities5k;
+      dots.forEach(function (d) {
+        var a = App.geom.hoodAnchor(d);
+        ctx.beginPath();
+        ctx.arc(a[0] * t.s + t.ox, a[1] * t.s + t.oy, 1.6, 0, Math.PI * 2);
+        ctx.fillStyle = C.thumbAccent;
+        ctx.fill();
+      });
+    } else if (level.kind === "hoods") {
       // Pastel mosaic: every neighborhood in its shading tint
-      App.data.hoods.forEach(function (h) {
+      data.hoods.forEach(function (h) {
         ctx.beginPath();
         traceRingsT(ctx, h.rings, t);
         ctx.fillStyle = "hsla(" + ((h.id * 47) % 360) + ", 45%, 55%, 0.45)";
@@ -127,7 +183,7 @@
       });
     } else if (level.hoodId >= 0) {
       ctx.beginPath();
-      traceRingsT(ctx, App.data.hoods[level.hoodId].rings, t);
+      traceRingsT(ctx, data.hoods[level.hoodId].rings, t);
       ctx.globalAlpha = 0.9;
       ctx.fillStyle = C.thumbAccent;
       ctx.fill();
@@ -138,7 +194,7 @@
       ctx.beginPath();
       var majorsOnly = level.id === "majors";
       var step2 = Math.pow(1.0 / t.s, 2); // skip sub-pixel detail
-      App.data.streets.forEach(function (s) {
+      data.streets.forEach(function (s) {
         if (majorsOnly && s.cls !== 0) return;
         for (var g = 0; g < s.segs.length; g++) {
           var seg = s.segs[g];
@@ -220,10 +276,16 @@
     }
     els.menuSpecials.innerHTML = "";
     els.menuTransport.innerHTML = "";
+    els.menuLatvia.innerHTML = "";
     els.menuHoods.innerHTML = "";
     hoodCards = [];
     levels.specials.forEach(function (l) { els.menuSpecials.appendChild(levelCard(l, dpr, theme)); });
     levels.transport.forEach(function (l) { els.menuTransport.appendChild(levelCard(l, dpr, theme)); });
+    // Latvia section vanishes as a whole when its data file is absent
+    var lvLevels = levels.latvia || [];
+    $("menu-latvia-h2").classList.toggle("hidden", !lvLevels.length);
+    els.menuLatvia.classList.toggle("hidden", !lvLevels.length);
+    lvLevels.forEach(function (l) { els.menuLatvia.appendChild(levelCard(l, dpr, theme)); });
     levels.hoods.forEach(function (l) {
       var card = levelCard(l, dpr, theme);
       els.menuHoods.appendChild(card);
@@ -310,7 +372,7 @@
     $("sum-missed-word").textContent = KIND_MISSED[res.level.kind] || "Missed streets";
     var flashFn;
     var featItems = featItemsFor(res.level.kind);
-    if (res.level.kind === "hoods") {
+    if (KIND_POLY[res.level.kind]) {
       flashFn = App.renderer.flashHoods;
     } else if (featItems) {
       flashFn = function (ids, color, dur, pulses) {
@@ -337,6 +399,7 @@
     els.summary = $("summary");
     els.menuSpecials = $("menu-specials");
     els.menuTransport = $("menu-transport");
+    els.menuLatvia = $("menu-latvia");
     els.menuHoods = $("menu-hoods");
     els.hoodSearch = $("hood-search");
     els.hoodNone = $("hood-none");
@@ -363,6 +426,7 @@
     });
     $("btn-study").addEventListener("click", function () { App.startStudy(); });
     $("btn-quit").addEventListener("click", function () { App.showMenu(); });
+    $("btn-restart").addEventListener("click", function () { App.restartLevel(); });
     $("btn-skip").addEventListener("click", function () { App.skipActive(); });
     $("btn-study-back").addEventListener("click", function () { App.showMenu(); });
     $("study-districts").addEventListener("change", App.study.onToggle);
@@ -371,7 +435,8 @@
     $("sum-again").addEventListener("click", function () { App.startGame(summaryLevel); });
     $("sum-menu").addEventListener("click", function () { App.showMenu(); });
     $("sum-study").addEventListener("click", function () {
-      App.startStudy({ bbox: summaryLevel.bbox, districts: summaryLevel.kind === "hoods" });
+      App.startStudy({ bbox: summaryLevel.bbox,
+        districts: !!KIND_POLY[summaryLevel.kind] });
     });
   }
 

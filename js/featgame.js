@@ -5,7 +5,11 @@
   "use strict";
   window.App = window.App || {};
 
-  App.createFeatureQuiz = function (getItems) {
+  App.createFeatureQuiz = function (getItems, opts) {
+
+  // Pick radii in screen px; city-dot quizzes widen them a little
+  var HOVER_PX = (opts && opts.hoverPx) || 12;
+  var CLICK_PX = (opts && opts.clickPx) || 16;
 
   var game = {
     active: false,
@@ -81,11 +85,11 @@
       App.renderer.setHoverFeat(-1);
       App.renderer.setGuideHover(wx !== null &&
         hitsBridge(getItems()[game.items[game.idx].ids[0]], wx, wy,
-          12 / App.view.scale));
+          HOVER_PX / App.view.scale));
       return;
     }
     if (wx === null || game.phase !== "await") { App.renderer.setHoverFeat(-1); return; }
-    var tol = 12 / App.view.scale;
+    var tol = HOVER_PX / App.view.scale;
     // Target-first, like clicks: on a shared corridor the ASKED line
     // highlights, showing exactly what a click there will select.
     var target = getItems()[game.items[game.idx].ids[0]];
@@ -98,7 +102,7 @@
 
   function onClick(wx, wy, cx, cy) {
     if (game.phase !== "await" && game.phase !== "guided") return;
-    var tol = 16 / App.view.scale;
+    var tol = CLICK_PX / App.view.scale;
     var item = game.items[game.idx];
     var target = getItems()[item.ids[0]];
     if (game.phase === "guided") {
@@ -149,6 +153,7 @@
     App.renderer.setGuideHover(false);
     App.renderer.revealLabel = null;
     App.renderer.invalidate();
+    App.sound.play("tick");
     advance();
   }
 
@@ -234,6 +239,13 @@
 
   App.bridgegame = App.createFeatureQuiz(function () { return App.data.bridges; });
   App.parkgame = App.createFeatureQuiz(function () { return App.data.parks; });
+  // Latvia city dots (LATVIA_DATA.cities / cities5k); items are tiny rings,
+  // so they render and hit-test as dot markers at any sane zoom
+  var CITY_PICK = { hoverPx: 16, clickPx: 22 };
+  App.lvCityGame = App.createFeatureQuiz(function () { return App.data.cities || []; },
+    CITY_PICK);
+  App.lvCityGame5k = App.createFeatureQuiz(function () { return App.data.cities5k || []; },
+    CITY_PICK);
   App.transitGames = {
     tram: App.createFeatureQuiz(function () { return App.data.transit.tram; }),
     trolleybus: App.createFeatureQuiz(function () { return App.data.transit.trolleybus; }),
