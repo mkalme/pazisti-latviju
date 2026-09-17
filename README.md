@@ -10,7 +10,10 @@ popover (the choice is remembered).
 
 ## Play
 
-Open `index.html` in a browser (double-clicking works — no server needed), or:
+**Online: <https://mkalme.github.io/pazisti-latviju/>**
+
+Or locally: open `index.html` in a browser (double-clicking works — no server
+needed), or:
 
 ```
 python3 tools/serve.py
