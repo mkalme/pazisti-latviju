@@ -1845,6 +1845,7 @@ def main():
             if not starts or not targets:
                 continue
             dist = {k: 0.0 for k in starts}
+            kdrawn = {k: 0.0 for k in starts}
             kpt = dict(starts)
             prevv = {}
             h = [(0.0, k) for k in starts]
@@ -1858,22 +1859,29 @@ def main():
                     goal = k
                     break
                 for ui, vi in by_vertex.get(k, ()):
-                    pts = unnamed[ui]["pts"]
+                    u = unnamed[ui]
+                    drawn = u.get("own_name") is None and not u.get("pool_only")
+                    pts = u["pts"]
                     for nvi in (vi - 1, vi + 1):
                         if not (0 <= nvi < len(pts)):
                             continue
-                        nd = dv + math.hypot(pts[nvi][0] - pts[vi][0],
-                                             pts[nvi][1] - pts[vi][1])
+                        step = math.hypot(pts[nvi][0] - pts[vi][0],
+                                          pts[nvi][1] - pts[vi][1])
+                        nd = dv + step
                         if nd > budget:
                             continue
                         k2 = vkeys[ui][nvi]
                         if nd < dist.get(k2, 1e18):
                             dist[k2] = nd
+                            kdrawn[k2] = kdrawn[k] + (step if drawn else 0.0)
                             kpt[k2] = (pts[nvi][0], pts[nvi][1])
                             prevv[k2] = k
                             heapq.heappush(h, (nd, k2))
             if goal is None:
                 continue
+            if kdrawn.get(goal, 0.0) > 0.5 * dist[goal]:
+                continue  # the crossing is already drawn as a ctx road —
+                          # the map is continuous there without a connector
             path = [kpt[goal]]
             k = goal
             while k in prevv:

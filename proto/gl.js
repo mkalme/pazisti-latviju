@@ -30,19 +30,21 @@
   // (its true width shrinking under the pixel floor). Majors never fade —
   // zoomed out, the arteries stay full-strength over a faint minor-road
   // carpet, which is what makes them readable as MAIN at city scale.
+  // Pixel FLOORS stay slim so a zoomed-out map is fine linework — the
+  // hierarchy at overview reads through color and fading more than bulk.
   var W_STREET = [
-    { base: 14.0, min: 2.8, max: 26.0, fadeTo: 1.0 },   // 0 highways (few)
-    { base: 10.0, min: 2.2, max: 20.0, fadeTo: 1.0 },   // 1 primary
-    { base: 7.5,  min: 1.6, max: 15.0, fadeTo: 0.65 },  // 2 secondary
-    { base: 5.5,  min: 1.2, max: 12.0, fadeTo: 0.42 },  // 3 tertiary
-    { base: 4.0,  min: 1.0, max: 10.0, fadeTo: 0.28 }   // 4 residential
+    { base: 14.0, min: 2.0, max: 26.0, fadeTo: 1.0 },   // 0 highways (few)
+    { base: 10.0, min: 1.5, max: 20.0, fadeTo: 1.0 },   // 1 primary
+    { base: 7.5,  min: 1.1, max: 15.0, fadeTo: 0.65 },  // 2 secondary
+    { base: 5.5,  min: 0.85, max: 12.0, fadeTo: 0.42 }, // 3 tertiary
+    { base: 4.0,  min: 0.7, max: 10.0, fadeTo: 0.28 }   // 4 residential
   ];
   var W_CTX = [
-    { base: 10.0, min: 0.7, max: 9.0, fadeTo: 0.22 },
-    { base: 7.0,  min: 0.7, max: 8.0, fadeTo: 0.22 },
-    { base: 5.0,  min: 0.7, max: 7.0, fadeTo: 0.22 },
-    { base: 4.0,  min: 0.7, max: 6.0, fadeTo: 0.22 },
-    { base: 3.0,  min: 0.7, max: 5.0, fadeTo: 0.22 }
+    { base: 10.0, min: 0.5, max: 9.0, fadeTo: 0.22 },
+    { base: 7.0,  min: 0.5, max: 8.0, fadeTo: 0.22 },
+    { base: 5.0,  min: 0.5, max: 7.0, fadeTo: 0.22 },
+    { base: 4.0,  min: 0.5, max: 6.0, fadeTo: 0.22 },
+    { base: 3.0,  min: 0.5, max: 5.0, fadeTo: 0.22 }
   ];
   var BORDER_PX = 1.6;    // casing thickness per side, css px
   // The cased style fades in ABOVE every class's minimum width, so a
