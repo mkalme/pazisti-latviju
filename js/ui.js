@@ -278,7 +278,7 @@
       var majorsOnly = level.id === "majors";
       var step2 = Math.pow(1.0 / t.s, 2); // skip sub-pixel detail
       data.streets.forEach(function (s) {
-        if (majorsOnly && s.cls !== 0) return;
+        if (majorsOnly && s.cls > 2) return;
         for (var g = 0; g < s.segs.length; g++) {
           var seg = s.segs[g];
           var last = seg.length - 1;

@@ -19,7 +19,9 @@ never translated.
 - Rebuild data: `python3 tools/fetch_osm.py` (downloads to `data/raw/`,
   skips existing files — delete one to refetch; retries + mirror fallback)
   then `python3 tools/build_data.py` → `data/riga_data.js`
-  (`window.RIGA_DATA = {...}`; loaded as a script, never fetched — file:// CORS).
+  (`window.RIGA_DATA = {...}`; loaded as a script, never fetched — file:// CORS),
+  then `python3 tools/check_data.py` — the street-quality regression gate
+  (see Data policies below); a rebuild is not done until it passes.
 - `data/raw/` is not in git (large, refetchable); `data/riga_data.js` is
   committed so the game runs without touching Overpass.
 - Latvia dataset: `python3 tools/fetch_osm.py latvia_` (name-prefix filter —
@@ -115,10 +117,58 @@ never translated.
 Hard-won policies — do not casually undo:
 - **A street is reconstructed, not just grouped by name**: compound border
   names split ("A / B"), cross-boundary ways merged, named ways of minor
-  classes only *complete* existing streets, disconnected components healed by
-  near-direct chains of other ways. **Exclusive ownership**: every stretch
-  belongs to ONE street (smaller street wins transfers) so two streets can
-  never highlight together. Remaining gaps are real (construction etc.).
+  classes only *complete* existing streets. Disconnected components are
+  healed by **gap-anchored** chains of other ways: a chain may only launch
+  within `HEAL_ANCHOR_R` of the two components' closest vertices, must
+  arrive within `HEAL_ARRIVE_R` of the far side, and is pruned to the
+  ellipse the `1.4 x direct + 60` budget allows around the REAL gap — so it
+  can follow a corridor for kilometers (`HEAL_GAP_MAX == CLUSTER_JOIN`) but
+  never wander around blocks (free-launch healing once let Baznīcas iela
+  absorb 1.2 km of Skolas/Ģertrūdes/Lāčplēša). ONE best chain per pair,
+  smallest-gap-first, already-connected pairs skipped, and healing runs in
+  `HEAL_ROUNDS` rounds so donors split by transfers re-heal. Unnamed
+  foot/cycle paths (`streets_pool_paths`) bridge only gaps <= `PATH_GAP_MAX`.
+  Pairs still disconnected with gaps <= `BRIDGE_MAX` (interchanges with no
+  direct way) get a straight SYNTHETIC connector that takes nobody's
+  pavement. **Exclusive ownership**: every stretch belongs to ONE street. A
+  street may take a NAMED stretch only from a street with more total length
+  (bridge wins deck), except junction slivers <= `SLIVER_MAX`, and never
+  more than `NAMED_CHAIN_MAX` per chain — a long continuation under another
+  street's name stays that street's; takes are index intervals and the
+  donor keeps the remainder pieces. Same-name components join into ONE
+  entity only when a CORRIDOR TEST passes: an ownership-blind route over
+  road geometry (paths excluded) between their closest vertices within
+  `MERGE_K x gap + MERGE_C` and `CLUSTER_JOIN` — K. Valdemāra continues
+  over the Vanšu deck, while Kleistu iela's Babīte branch (no direct road
+  link) is a SEPARATE entity so hovering one never lights up the other.
+  Leftover non-main clusters under `FRAG_MAX_LEN` and stray patch-only
+  clusters are demoted to ctx decor. **Streets end where Riga ends**: the
+  58 apkaimes union is the city polygon; an outside stretch survives only
+  as a weave reconnecting two in-city parts (Berģu iela), and a finished
+  entity with under `CITY_MIN_SHARE` of its length strictly inside is the
+  neighbouring municipality's road (Kleistu iela's border-line branch into
+  Mārupes novads) — drawn as ctx, never a quiz street. Remaining bare gaps
+  are real — rail yards, field crossings, corridors that detour under
+  another name.
+- **Dual carriageways are collapsed to one centerline**: oneway ways (minus
+  roundabouts) chain into strands across junctions (straightest continuation
+  wins), anti-parallel strand pairs `DC_MIN..DC_MAX` apart merge into their
+  midline, then leftover parallel frontage lanes are absorbed into the new
+  centerline and loose endpoints snap onto it. Two-way streets never
+  collapse — a loop street's anti-parallel legs are not carriageways.
+  AFTER simplification every entity is WELDED (`weld_entity`): an endpoint
+  within `WELD_R` of the street's other geometry moves onto it (OSM
+  junctions with unshared nodes, collapse cut offsets), and dangling ends
+  reach a centerline from up to `DC_MAX`. The weld must stay after
+  simplify — simplification moves lines by up to `STREET_TOL` and would
+  reopen freshly closed cracks. Then `entity_bridge` enforces the EMIT
+  INVARIANT: no entity ships with an internal gap <= `BRIDGE_MAX` — a late
+  split from any pass (the crumb drop once severed Aleksandra Čaka iela's
+  spine) gets a straight connector at build time, and check_data gates on
+  the invariant itself.
+  `python3 tools/check_data.py` prints the quality report (absorption
+  deltas, residual doubled km, split components) and enforces regression
+  gates — run it after every rebuild; it must stay green.
 - Bridges = the healed street geometry where names coincide + outlines/
   railway decks from a dedicated harvest. Parks = `leisure=park|garden` with
   a `PARK_EXCLUDE` curation set. Transit = OSM route relations filtered to

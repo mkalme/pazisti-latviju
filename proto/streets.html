@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Rīgas ielas — WebGL prototips</title>
+<style>
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  body { background: #f4f1ea; font: 13px/1.4 system-ui, sans-serif; }
+  #map { position: absolute; inset: 0; width: 100%; height: 100%;
+         touch-action: none; cursor: crosshair; display: block; }
+  #hud { position: absolute; top: 10px; left: 10px; z-index: 2;
+         background: rgba(255,255,255,.82); color: #3d3a34;
+         border-radius: 8px; padding: 8px 10px; min-width: 168px;
+         box-shadow: 0 1px 6px rgba(0,0,0,.18); user-select: none; }
+  body.dark #hud { background: rgba(24,26,29,.85); color: #c9cdd3; }
+  #hud b { font-size: 15px; }
+  #hud .row { display: flex; justify-content: space-between; gap: 12px; }
+  #hud .num { font-variant-numeric: tabular-nums; }
+  #hud button, #hud select {
+    margin: 6px 6px 0 0; padding: 3px 9px; border-radius: 6px;
+    border: 1px solid #b6b0a4; background: transparent;
+    color: inherit; cursor: pointer; font: inherit; }
+  #hud select option { color: #3d3a34; }
+  #tip { position: fixed; z-index: 3; pointer-events: none; display: none;
+         background: rgba(30,30,30,.92); color: #fff; padding: 3px 8px;
+         border-radius: 5px; white-space: nowrap; font-size: 13px; }
+  #legend { position: absolute; left: 10px; bottom: 10px; z-index: 2;
+            background: rgba(255,255,255,.82); color: #3d3a34;
+            border-radius: 8px; padding: 8px 10px;
+            box-shadow: 0 1px 6px rgba(0,0,0,.18); user-select: none;
+            font-size: 12px; }
+  body.dark #legend { background: rgba(24,26,29,.85); color: #c9cdd3; }
+  #legend .lrow { display: flex; align-items: center; gap: 8px;
+                  margin: 3px 0; }
+  #legend .lhead { display: flex; gap: 8px; opacity: .65;
+                   margin-bottom: 2px; }
+  #legend .lhead span:first-child { width: 92px; display: flex; }
+  #legend .lhead span:first-child i { width: 36px; font-style: normal; }
+  #legend canvas { display: block; }
+  #err { position: absolute; inset: 0; display: none; z-index: 4;
+         align-items: center; justify-content: center; color: #3d3a34;
+         background: #f4f1ea; text-align: center; padding: 24px; }
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+<div id="hud">
+  <b>Rīgas ielas · WebGL</b>
+  <div class="row"><span>fps</span><span class="num" id="h-fps">–</span></div>
+  <div class="row"><span>kadrs</span><span class="num" id="h-ms">–</span></div>
+  <div class="row"><span>posmi</span><span class="num" id="h-inst">–</span></div>
+  <div class="row"><span>mērogs</span><span class="num" id="h-scale">–</span></div>
+  <div>
+    <select id="s-style" title="Krāsu palete">
+      <option value="paper">Papīrs</option>
+      <option value="osm">OSM</option>
+      <option value="mono">Tinte</option>
+      <option value="slate">Okeāns</option>
+    </select>
+    <button id="b-theme">Tumšais</button>
+    <button id="b-reset">Atiestatīt</button>
+  </div>
+</div>
+<div id="tip"></div>
+<div id="legend"></div>
+<div id="err"><div>Šim prototipam vajag WebGL2 —<br>pārlūks to nepiedāvā.</div></div>
+<script>window.App = {};</script>
+<script src="../data/riga_data.js"></script>
+<script src="../js/geometry.js"></script>
+<script src="../js/spatial.js"></script>
+<script src="../js/view.js"></script>
+<script src="gl.js"></script>
+</body>
+</html>

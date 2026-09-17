@@ -55,8 +55,9 @@
      theme switch recolors everything already answered. */
   function resolve(c) { return COLORS[c] || c; }
 
-  // Visual street width in world meters by class (motorway..pedestrian)
-  var CLS_WIDTH = [8, 6, 4.5];
+  // Visual street width in world meters by class:
+  // 0 highways · 1 primary · 2 secondary · 3 tertiary · 4 residential
+  var CLS_WIDTH = [11, 8.5, 6.5, 5.5, 4.5];
 
   var renderer = {
     canvas: null, ctx: null,
@@ -281,7 +282,7 @@
     // fades further so the quiz shapes stay dominant.
     if (cfg.hoodQuiz || cfg.featQuiz) ctx.globalAlpha = 0.45;
     var roads = data.ctx || [];
-    for (cls = 2; cls >= 0; cls--) {
+    for (cls = CLS_WIDTH.length - 1; cls >= 0; cls--) {
       ctx.beginPath();
       for (i = 0; i < roads.length; i++) {
         var rd = roads[i];
@@ -294,7 +295,7 @@
       ctx.stroke();
     }
     if (cfg.inLevel) {
-      for (cls = 2; cls >= 0; cls--) {
+      for (cls = CLS_WIDTH.length - 1; cls >= 0; cls--) {
         ctx.beginPath();
         for (i = 0; i < streets.length; i++) {
           st = streets[i];
@@ -308,7 +309,7 @@
       }
     }
     ctx.globalAlpha = 1;
-    for (cls = 2; cls >= 0; cls--) {
+    for (cls = CLS_WIDTH.length - 1; cls >= 0; cls--) {
       ctx.beginPath();
       for (i = 0; i < streets.length; i++) {
         st = streets[i];

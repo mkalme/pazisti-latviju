@@ -63,6 +63,14 @@ def queries():
         f'[out:json][timeout:300];{AREA}'
         'way(area.riga)["highway"~"^(service|track)$"][!"name"];out geom qt;'
     )
+    # Unnamed foot/cycle/path ways: absorption-pool only, and further limited
+    # to bridging SMALL street gaps (steps excluded — stairs must not heal
+    # roads). A plaza walkway is sometimes the only link between two halves
+    # of a street.
+    qs["streets_pool_paths"] = (
+        f'[out:json][timeout:300];{AREA}'
+        'way(area.riga)["highway"~"^(footway|path|cycleway)$"][!"name"];out geom qt;'
+    )
     # Named ways JUST OUTSIDE the city boundary (any highway class): streets
     # like Berģu iela weave across it, and the area filter leaves holes.
     qs["streets_boundary"] = (
@@ -249,7 +257,8 @@ def verify_riga():
         total_ways += len(ways)
         names.update(w["tags"]["name"] for w in ways)
         print(f"  {cls}: {len(ways)} ways")
-    for extra in ("streets_unnamed", "streets_links", "streets_named_extra"):
+    for extra in ("streets_unnamed", "streets_links", "streets_named_extra",
+                  "streets_pool_paths"):
         data = json.loads((RAW_DIR / f"{extra}.json").read_text())
         n = sum(1 for e in data["elements"] if e["type"] == "way")
         print(f"  {extra}: {n} ways")

@@ -24,7 +24,7 @@
     var perHood = new Map();
     data.streets.forEach(function (s) {
       all.push(s.id);
-      if (s.cls === 0) majors.push(s.id);
+      if (s.cls <= 2) majors.push(s.id);   // highways + primary + secondary
       s.hoods.forEach(function (h) {
         if (!perHood.has(h)) perHood.set(h, []);
         perHood.get(h).push(s.id);
