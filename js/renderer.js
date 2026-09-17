@@ -68,8 +68,6 @@
     hoverHood: -1,      // hood id tinted during the neighborhoods quiz
     hoverFeat: -1,      // feature id highlighted during a feature quiz
     flashes: [],        // {ids, color, t0, dur, pulses [, hood:true]}
-    pins: [],           // street ids with permanent labels (study mode)
-    hoodPins: [],       // hood ids with permanent labels (districts study)
     revealLabel: null,  // {ids} street labels | {hood: id} during reveals
     guide: null,        // {ids} | {hood}: persistent pulse until clicked
     guideHover: false,  // cursor is on the guided target: steady hover color
@@ -80,8 +78,6 @@
       hoodQuiz: false,      // neighborhoods quiz presentation
       hoodColorOf: null,    // fn(hoodId) -> palette key | null
       featQuiz: null,       // {items, colorOf}: bridges/parks quiz layer
-      shadeHoods: false,    // study-mode pastel shading
-      majorsOnly: false,    // study-mode filter
       focusIds: null,       // Set: sub-level members; everything else grays
       focusRings: null,     // the containing municipality's outline
       focusNov: null        // its unit id (skipped in the context borders)
@@ -194,17 +190,6 @@
     ctx.fillStyle = COLORS.water;
     ctx.fill("evenodd");
 
-    // Neighborhood shading (study mode): per-hood tints
-    if (cfg.shadeHoods) {
-      for (h = 0; h < data.hoods.length; h++) {
-        hood = data.hoods[h];
-        if (!App.geom.bboxIntersects(hood.bbox, cull)) continue;
-        ctx.beginPath();
-        traceRings(ctx, hood.rings, bview);
-        ctx.fillStyle = "hsla(" + ((hood.id * 47) % 360) + ", 45%, 55%, 0.12)";
-        ctx.fill("evenodd");
-      }
-    }
     // Answered hoods in the neighborhoods quiz: state-colored fills
     if (cfg.hoodColorOf) {
       for (h = 0; h < data.hoods.length; h++) {
@@ -329,7 +314,6 @@
         st = streets[i];
         if (st.cls !== cls) continue;
         if (cfg.inLevel && !cfg.inLevel.has(st.id)) continue;
-        if (cfg.majorsOnly && st.cls !== 0) continue;
         if (!App.geom.bboxIntersects(st.bbox, cull)) continue;
         var color = cfg.colorOf ? cfg.colorOf(st.id) : null;
         if (color) { colored.push(st); continue; }
@@ -674,12 +658,6 @@
       ctx.globalAlpha = 1;
     }
 
-    for (var p = 0; p < renderer.pins.length; p++) {
-      drawLabel(ctx, data.streets[renderer.pins[p]], view);
-    }
-    for (var hp = 0; hp < renderer.hoodPins.length; hp++) {
-      drawHoodLabel(ctx, data.hoods[renderer.hoodPins[hp]], view);
-    }
     if (renderer.revealLabel) {
       if (renderer.guide) ctx.globalAlpha = ga; // pulse with the shape
       if (renderer.revealLabel.hood != null) {

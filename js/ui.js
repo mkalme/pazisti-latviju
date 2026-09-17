@@ -11,26 +11,29 @@
   var thumbCache = { theme: "", canvas: null };
   var thumbCanvasCache = new Map(); // "theme:levelId" -> rendered canvas
 
-  /* Per-kind lookups: card unit, summary wording, feature dataset, thumb hue */
-  var KIND_UNIT = { hoods: " areas", latvia: " territories",
-    lvpagasti: " territories",
-    lvcities: " cities", lvcities5k: " cities", lvcitiesall: " towns",
-    lvrivers: " rivers",
-    lvlakes: " lakes", lvroads: " roads", lvcastles: " castles",
-    lvnature: " areas", lvregions: " regions",
-    bridges: " bridges", parks: " parks",
-    tram: " lines", trolleybus: " lines", busday: " lines",
-    busnight: " lines", rail: " lines" };
-  var KIND_MISSED = { hoods: "Missed neighborhoods", latvia: "Missed territories",
-    lvpagasti: "Missed territories",
-    lvcities: "Missed cities", lvcities5k: "Missed cities",
-    lvcitiesall: "Missed towns",
-    lvrivers: "Missed rivers", lvlakes: "Missed lakes",
-    lvroads: "Missed roads", lvcastles: "Missed castles",
-    lvnature: "Missed areas", lvregions: "Missed regions",
-    bridges: "Missed bridges",
-    parks: "Missed parks", tram: "Missed lines", trolleybus: "Missed lines",
-    busday: "Missed lines", busnight: "Missed lines", rail: "Missed lines" };
+  /* Per-kind lookups: card unit, summary wording, feature dataset, thumb
+     hue. The wording tables hold i18n KEYS (App.i18n resolves at render
+     time, so a language switch only needs a menu rebuild). */
+  var KIND_UNIT = { hoods: "unit.hoods", latvia: "unit.territories",
+    lvpagasti: "unit.territories",
+    lvcities: "unit.cities", lvcities5k: "unit.cities",
+    lvcitiesall: "unit.towns",
+    lvrivers: "unit.rivers",
+    lvlakes: "unit.lakes", lvroads: "unit.roads", lvcastles: "unit.castles",
+    lvnature: "unit.areas", lvregions: "unit.regions",
+    bridges: "unit.bridges", parks: "unit.parks",
+    tram: "unit.lines", trolleybus: "unit.lines", busday: "unit.lines",
+    busnight: "unit.lines", rail: "unit.lines" };
+  var KIND_MISSED = { hoods: "missed.hoods", latvia: "missed.territories",
+    lvpagasti: "missed.territories",
+    lvcities: "missed.cities", lvcities5k: "missed.cities",
+    lvcitiesall: "missed.towns",
+    lvrivers: "missed.rivers", lvlakes: "missed.lakes",
+    lvroads: "missed.roads", lvcastles: "missed.castles",
+    lvnature: "missed.areas", lvregions: "missed.regions",
+    bridges: "missed.bridges",
+    parks: "missed.parks", tram: "missed.lines", trolleybus: "missed.lines",
+    busday: "missed.lines", busnight: "missed.lines", rail: "missed.lines" };
   var KIND_POLY = { hoods: 1, latvia: 1, lvpagasti: 1 }; // hoodgame kinds
   var TRANSIT_HUE = { tram: "hsla(0, 65%, 55%, 0.9)",
     trolleybus: "hsla(140, 50%, 45%, 0.9)", busday: "hsla(215, 65%, 55%, 0.9)",
@@ -78,10 +81,9 @@
   function showScreen(name) {
     els.menu.classList.toggle("hidden", name !== "menu");
     els.hud.classList.toggle("hidden", name !== "game");
-    els.studyBar.classList.toggle("hidden", name !== "study");
     els.summary.classList.add("hidden");
     // Fits must not hide the map's top under the floating bar
-    var bar = name === "game" ? els.hud : name === "study" ? els.studyBar : null;
+    var bar = name === "game" ? els.hud : null;
     App.view.topInset = bar
       ? Math.ceil(bar.querySelector(".hud-bar").getBoundingClientRect().bottom) : 0;
   }
@@ -301,7 +303,8 @@
   function levelCard(level, dpr, theme) {
     var btn = document.createElement("button");
     btn.className = "level-card";
-    if (level.note) btn.title = level.note;
+    var note = App.i18n.levelNote(level);
+    if (note) btn.title = note;
     var key = theme + ":" + level.id;
     var cv = thumbCanvasCache.get(key);
     if (!cv) {
@@ -313,17 +316,19 @@
     btn.appendChild(cv);
     var nm = document.createElement("span");
     nm.className = "lv-name";
-    nm.textContent = level.name;
+    nm.textContent = App.i18n.levelName(level);
     btn.appendChild(nm);
     var meta = document.createElement("span");
     meta.className = "lv-meta";
-    meta.textContent = level.itemCount + (KIND_UNIT[level.kind] || " streets");
+    meta.textContent = App.i18n.n(level.itemCount,
+      KIND_UNIT[level.kind] || "unit.streets");
     var b = App.storage.bestFor(level.id);
     if (b) {
       var best = document.createElement("span");
       best.className = "lv-best";
       best.textContent = " · ★ " + b.bestPct + "%";
-      best.title = "Best: " + b.bestPct + "% in " + formatTime(b.bestTimeMs);
+      best.title = App.i18n.t("card.best",
+        { pct: b.bestPct, time: formatTime(b.bestTimeMs) });
       meta.appendChild(best);
     }
     btn.appendChild(meta);
@@ -336,15 +341,16 @@
   var currentCat = null; // open category submenu: "pagasti" | "streets"
 
   function setCategory(cat) {
+    var changed = cat !== currentCat;
     currentCat = cat;
     $("menu-root").classList.toggle("hidden", !!cat);
     $("menu-sub").classList.toggle("hidden", !cat);
     $("sub-pagasti").classList.toggle("hidden", cat !== "pagasti");
     $("sub-streets").classList.toggle("hidden", cat !== "streets");
-    $("sub-title").textContent =
-      cat === "pagasti" ? "Pagasti" : cat === "streets" ? "Riga streets" : "";
-    var panel = document.querySelector(".menu-panel");
-    if (panel) panel.scrollTop = 0;
+    $("sub-title").textContent = cat === "pagasti" ? App.i18n.t("cat.pagasti")
+      : cat === "streets" ? App.i18n.t("cat.streets") : "";
+    // the .screen overlay is the scroller; keep the position on rebuilds
+    if (changed) els.menu.scrollTop = 0;
   }
 
   /* A card that opens a category submenu instead of starting a level */
@@ -361,7 +367,7 @@
     btn.appendChild(nm);
     var meta = document.createElement("span");
     meta.className = "lv-meta";
-    meta.textContent = count + " levels";
+    meta.textContent = App.i18n.n(count, "n.levels");
     btn.appendChild(meta);
     btn.addEventListener("click", function () { setCategory(cat); });
     return btn;
@@ -406,8 +412,8 @@
     els.menuHoods.innerHTML = "";
     hoodCards = [];
     levels.specials.forEach(function (l) { els.menuSpecials.appendChild(levelCard(l, dpr, theme)); });
-    // the street modes live behind a folder card in the Citywide row
-    els.menuSpecials.appendChild(folderCard("Riga streets",
+    // the street modes live behind a folder card in the Riga row
+    els.menuSpecials.appendChild(folderCard(App.i18n.t("cat.streets"),
       levels.streets.length, levels.streets[1] || levels.streets[0],
       "streets", dpr));
     levels.transport.forEach(function (l) { els.menuTransport.appendChild(levelCard(l, dpr, theme)); });
@@ -419,7 +425,7 @@
     var pagLevels = levels.pagasti || [];
     if (pagLevels.length) {
       // the pagasti levels live behind a folder card in the Latvia row
-      els.menuLatvia.appendChild(folderCard("Pagasti",
+      els.menuLatvia.appendChild(folderCard(App.i18n.t("cat.pagasti"),
         pagLevels.length, pagLevels[0], "pagasti", dpr));
     }
     els.menuPagasti.innerHTML = "";
@@ -489,25 +495,6 @@
     t.style.top = Math.min(y + 18, window.innerHeight - t.offsetHeight - 8) + "px";
   }
 
-  function showTooltip(text, x, y, also) {
-    if (performance.now() < tempTooltipUntil) return;
-    var t = els.tooltip;
-    t.textContent = text;
-    if (also && also.length) {
-      var sub = document.createElement("div");
-      sub.className = "tt-also";
-      sub.textContent = "also here: " + also.join(" · ");
-      t.appendChild(sub);
-    }
-    t.classList.remove("hidden", "tooltip-bad");
-    placeTooltip(x, y);
-  }
-
-  function hideTooltip() {
-    if (performance.now() < tempTooltipUntil) return;
-    els.tooltip.classList.add("hidden");
-  }
-
   function tempTooltip(text, x, y, ms) {
     tempTooltipUntil = performance.now() + ms;
     els.tooltip.textContent = text;
@@ -527,14 +514,15 @@
   function showSummary(res) {
     summaryLevel = res.level;
     els.hud.classList.add("hidden");
-    els.sumTitle.textContent = res.level.name;
+    els.sumTitle.textContent = App.i18n.levelName(res.level);
     els.sumScore.textContent = res.pct + "%";
     els.sumBest.classList.toggle("hidden", !res.isBest);
-    els.sumDetail.textContent =
-      formatTime(res.timeMs) + " · " + res.firstTry + " of " + res.total + " on the first try";
+    els.sumDetail.textContent = App.i18n.t("sum.detail",
+      { time: formatTime(res.timeMs), n: res.firstTry, total: res.total });
     els.sumMissedWrap.classList.toggle("hidden", res.missed.length === 0);
     els.sumMissed.innerHTML = "";
-    $("sum-missed-word").textContent = KIND_MISSED[res.level.kind] || "Missed streets";
+    $("sum-missed-word").textContent =
+      App.i18n.t(KIND_MISSED[res.level.kind] || "missed.streets");
     var flashFn;
     var featItems = featItemsFor(res.level.kind);
     if (KIND_POLY[res.level.kind]) {
@@ -560,7 +548,6 @@
   function init() {
     els.menu = $("menu");
     els.hud = $("hud");
-    els.studyBar = $("study-bar");
     els.summary = $("summary");
     els.menuSpecials = $("menu-specials");
     els.menuTransport = $("menu-transport");
@@ -603,20 +590,11 @@
       }
     });
     $("btn-sub-back").addEventListener("click", function () { setCategory(null); });
-    $("btn-study").addEventListener("click", function () { App.startStudy(); });
     $("btn-quit").addEventListener("click", function () { App.showMenu(); });
     $("btn-restart").addEventListener("click", function () { App.restartLevel(); });
     $("btn-skip").addEventListener("click", function () { App.skipActive(); });
-    $("btn-study-back").addEventListener("click", function () { App.showMenu(); });
-    $("study-districts").addEventListener("change", App.study.onToggle);
-    $("study-shade").addEventListener("change", App.study.onToggle);
-    $("study-majors").addEventListener("change", App.study.onToggle);
     $("sum-again").addEventListener("click", function () { App.startGame(summaryLevel); });
     $("sum-menu").addEventListener("click", function () { App.showMenu(); });
-    $("sum-study").addEventListener("click", function () {
-      App.startStudy({ bbox: summaryLevel.bbox,
-        districts: !!KIND_POLY[summaryLevel.kind] });
-    });
   }
 
   App.ui = {
@@ -632,8 +610,6 @@
     promptFeedback: promptFeedback,
     setProgress: setProgress,
     setTimer: setTimer,
-    showTooltip: showTooltip,
-    hideTooltip: hideTooltip,
     tempTooltip: tempTooltip,
     showSummary: showSummary
   };

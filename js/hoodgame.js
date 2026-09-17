@@ -181,8 +181,6 @@
     cfg.colorOf = null;
     cfg.hoodQuiz = true;
     cfg.hoodColorOf = function (id) { return game.colors.get(id) || null; };
-    cfg.shadeHoods = false;
-    cfg.majorsOnly = false;
     App.view.onClick = onClick;
     App.view.onHover = onHover;
     App.view.fitBbox(level.bbox);

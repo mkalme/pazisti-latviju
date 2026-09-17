@@ -5,8 +5,8 @@
 
   var rigaData = null; // boot dataset; the menu always shows the Riga map
 
-  /* Swap the active dataset (Riga <-> Latvia). Engines, renderer, UI and
-     study all read App.data, so one reassignment reroutes everything; the
+  /* Swap the active dataset (Riga <-> Latvia). Engines, renderer and UI
+     all read App.data, so one reassignment reroutes everything; the
      renderer/view/spatial module captures are updated alongside. */
   App.useDataset = function (d) {
     if (App.data === d) return;
@@ -19,15 +19,12 @@
 
   App.showMenu = function () {
     engines().forEach(function (e) { e.stop(); });
-    App.study.exit();
     var cfg = App.renderer.config;
     cfg.inLevel = null;
     cfg.activeHood = -1;
     cfg.colorOf = null;
     cfg.hoodQuiz = false;
     cfg.hoodColorOf = null;
-    cfg.shadeHoods = false;
-    cfg.majorsOnly = false;
     cfg.focusIds = null;
     cfg.focusRings = null;
     cfg.focusNov = null;
@@ -72,18 +69,11 @@
   });
 
   App.startGame = function (level) {
-    App.study.exit();
     engines().forEach(function (e) { e.stop(); });
     App.useDataset(level.ds || rigaData);
     App.ui.showScreen("game");
-    App.ui.setLevelName(level.name);
+    App.ui.setLevelName(App.i18n.levelName(level));
     (ENGINE_BY_KIND[level.kind] || App.game).start(level);
-  };
-
-  App.startStudy = function (opts) {
-    engines().forEach(function (e) { e.stop(); });
-    App.ui.showScreen("study");
-    App.study.enter(opts);
   };
 
   App.skipActive = function () {
@@ -113,6 +103,9 @@
   };
 
   document.addEventListener("DOMContentLoaded", function () {
+    // Localize the static chrome first — the nodata panel needs it too
+    App.i18n.init();
+    App.i18n.apply();
     if (!window.RIGA_DATA) {
       document.getElementById("nodata").classList.remove("hidden");
       return;
@@ -154,10 +147,47 @@
     setPan.addEventListener("change", function () {
       App.view.panLock = !setPan.checked;
       App.storage.prefSet("pan", setPan.checked);
+      syncFastState();
     });
     setZoom.addEventListener("change", function () {
       App.view.zoomLock = !setZoom.checked;
       App.storage.prefSet("zoom", setZoom.checked);
+    });
+    // Fast mode is opt-in (pref stores the mode itself, not a capability)
+    App.view.fastClick = App.storage.prefGet("fast", false);
+    var setFast = document.getElementById("set-fast");
+    setFast.checked = App.view.fastClick;
+    function syncFastState() {
+      // needs panning locked: with panning on, a press may start a drag
+      setFast.disabled = setPan.checked;
+      document.getElementById("set-fast-row").title =
+        App.i18n.t(setPan.checked ? "set.fast.locked" : "set.fast.title");
+    }
+    syncFastState();
+    setFast.addEventListener("change", function () {
+      App.view.fastClick = setFast.checked;
+      App.storage.prefSet("fast", setFast.checked);
+    });
+
+    // Language switcher: retranslate chrome in place, rebuild what's open
+    var setLang = document.getElementById("set-lang");
+    setLang.value = App.i18n.lang;
+    App.setLang = function (lang) {
+      App.i18n.setLang(lang);
+      App.storage.prefSet("lang", App.i18n.lang);
+      setLang.value = App.i18n.lang;
+      App.i18n.apply();
+      syncFastState(); // its tooltip is language-dependent
+      if (!document.getElementById("menu").classList.contains("hidden")) {
+        App.ui.buildMenu(App.levelList);
+      }
+      var active = engines().find(function (e) { return e.active; });
+      if (active && active.level) {
+        App.ui.setLevelName(App.i18n.levelName(active.level));
+      }
+    };
+    setLang.addEventListener("change", function () {
+      App.setLang(setLang.value);
     });
     document.getElementById("set-sound").addEventListener("change", function (e) {
       App.setMuted(!e.target.checked);

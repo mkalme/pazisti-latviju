@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="lv">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>Riga Streets</title>
+<title>Pazīsti Latviju</title>
 <script>
 /* Apply the saved theme before first paint to avoid a light flash */
 try {
@@ -12,7 +12,7 @@ try {
   if (t) document.documentElement.dataset.theme = t;
 } catch (e) {}
 </script>
-<link rel="stylesheet" href="css/style.css?v=53">
+<link rel="stylesheet" href="css/style.css?v=54">
 </head>
 <body>
 
@@ -21,44 +21,48 @@ try {
 <div id="tooltip" class="hidden"></div>
 
 <div id="nodata" class="hidden panel">
-  <h1>Riga Streets</h1>
-  <p>Game data not found. Generate it first:</p>
+  <h1>Pazīsti Latviju</h1>
+  <p data-i18n="nodata.p1">Spēles dati nav atrasti. Vispirms tie jāizveido:</p>
   <pre>python3 tools/fetch_osm.py
 python3 tools/build_data.py</pre>
-  <p>then reload this page.</p>
+  <p data-i18n="nodata.p2">pēc tam pārlādē šo lapu.</p>
 </div>
 
 <div id="menu" class="screen hidden">
   <div class="panel menu-panel">
     <div id="menu-root">
-      <h1>Riga Streets</h1>
-      <p class="subtitle">The game names a street — click it on the map.
-        Green: first try. Yellow: second. Orange: third. Red: revealed.</p>
-      <button id="btn-study" class="btn btn-wide">🔍 Study the map</button>
-      <h2>Citywide</h2>
+      <h1>Pazīsti Latviju</h1>
+      <p class="subtitle" data-i18n="menu.subtitle">Spēle nosauc vietu —
+        noklikšķini uz tās kartē. Zaļš: pirmajā mēģinājumā. Dzeltens: otrajā.
+        Oranžs: trešajā. Sarkans: atbilde parādīta.</p>
+      <h2 data-i18n="menu.h2.riga">Rīga</h2>
       <div id="menu-specials" class="level-list"></div>
-      <h2>Public transport</h2>
+      <h2 data-i18n="menu.h2.transport">Sabiedriskais transports</h2>
       <div id="menu-transport" class="level-list"></div>
-      <h2 id="menu-latvia-h2">Latvia</h2>
+      <h2 id="menu-latvia-h2" data-i18n="menu.h2.latvia">Latvija</h2>
       <div id="menu-latvia" class="level-list"></div>
     </div>
     <div id="menu-sub" class="hidden">
       <div class="sub-head">
-        <button id="btn-sub-back" class="btn btn-small">‹ Back</button>
+        <button id="btn-sub-back" class="btn btn-small" data-i18n="menu.back">‹ Atpakaļ</button>
         <h1 id="sub-title"></h1>
       </div>
       <div id="sub-pagasti" class="hidden">
         <div id="menu-pagasti-top" class="level-list"></div>
-        <input id="pag-search" type="search" placeholder="Search municipalities…"
+        <input id="pag-search" type="search" placeholder="Meklēt novadus…"
+               data-i18n-placeholder="search.pagasti"
                autocomplete="off" spellcheck="false">
-        <div id="pag-none" class="hood-none hidden">No municipality matches</div>
+        <div id="pag-none" class="hood-none hidden"
+             data-i18n="search.pagasti.none">Neviens novads neatbilst</div>
         <div id="menu-pagasti" class="level-list"></div>
       </div>
       <div id="sub-streets" class="hidden">
         <div id="menu-streets-top" class="level-list"></div>
-        <input id="hood-search" type="search" placeholder="Search neighborhoods…"
+        <input id="hood-search" type="search" placeholder="Meklēt apkaimes…"
+               data-i18n-placeholder="search.hoods"
                autocomplete="off" spellcheck="false">
-        <div id="hood-none" class="hood-none hidden">No neighborhood matches</div>
+        <div id="hood-none" class="hood-none hidden"
+             data-i18n="search.hoods.none">Neviena apkaime neatbilst</div>
         <div id="menu-hoods" class="level-list"></div>
       </div>
     </div>
@@ -67,23 +71,15 @@ python3 tools/build_data.py</pre>
 
 <div id="hud" class="hidden">
   <div class="hud-bar">
-    <button id="btn-quit" class="btn btn-small">‹ Menu</button>
+    <button id="btn-quit" class="btn btn-small" data-i18n="hud.menu">‹ Izvēlne</button>
     <div id="level-name" class="hud-level"></div>
-    <div id="prompt">Click: <b id="prompt-name"></b> <span id="prompt-hint"></span></div>
+    <div id="prompt"><span data-i18n="hud.find">Atrodi:</span> <b id="prompt-name"></b> <span id="prompt-hint"></span></div>
     <div id="progress" class="hud-stat"></div>
     <div id="timer" class="hud-stat"></div>
-    <button id="btn-restart" class="btn btn-small" title="Restart this level">↻ Restart</button>
-    <button id="btn-skip" class="btn btn-small" title="Give up on this street (S)">Skip</button>
-  </div>
-</div>
-
-<div id="study-bar" class="hidden">
-  <div class="hud-bar">
-    <button id="btn-study-back" class="btn btn-small">‹ Menu</button>
-    <div class="hud-title">Study mode — hover for names, click to pin</div>
-    <label class="toggle"><input type="checkbox" id="study-districts"> Districts</label>
-    <label class="toggle"><input type="checkbox" id="study-shade"> Shading</label>
-    <label class="toggle"><input type="checkbox" id="study-majors"> Majors only</label>
+    <button id="btn-restart" class="btn btn-small" title="Sākt šo līmeni no jauna"
+            data-i18n="hud.restart" data-i18n-title="hud.restart.title">↻ No jauna</button>
+    <button id="btn-skip" class="btn btn-small" title="Padoties un parādīt atbildi (S)"
+            data-i18n="hud.skip" data-i18n-title="hud.skip.title">Izlaist</button>
   </div>
 </div>
 
@@ -92,51 +88,58 @@ python3 tools/build_data.py</pre>
     <h1 id="sum-title"></h1>
     <div class="sum-score-row">
       <div id="sum-score"></div>
-      <div id="sum-best" class="badge hidden">New best!</div>
+      <div id="sum-best" class="badge hidden" data-i18n="sum.best">Jauns rekords!</div>
     </div>
     <p id="sum-detail"></p>
     <div id="sum-missed-wrap">
-      <h2><span id="sum-missed-word">Missed streets</span>
-        <span class="hint">(hover to flash on the map)</span></h2>
+      <h2><span id="sum-missed-word">Neuzminētās ielas</span>
+        <span class="hint" data-i18n="sum.hint">(uzvirzi kursoru — iemirgosies kartē)</span></h2>
       <ul id="sum-missed"></ul>
     </div>
     <div class="btn-row">
-      <button id="sum-again" class="btn">Play again</button>
-      <button id="sum-study" class="btn">Study this area</button>
-      <button id="sum-menu" class="btn">Menu</button>
+      <button id="sum-again" class="btn" data-i18n="sum.again">Spēlēt vēlreiz</button>
+      <button id="sum-menu" class="btn" data-i18n="sum.menu">Izvēlne</button>
     </div>
   </div>
 </div>
 
 <div id="corner-controls">
-  <button id="btn-theme" class="corner-btn" title="Light/dark theme">🌙</button>
-  <button id="btn-settings" class="corner-btn" title="Map & sound settings">⚙️</button>
+  <button id="btn-theme" class="corner-btn" title="Gaišais/tumšais režīms"
+          data-i18n-title="btn.theme.title">🌙</button>
+  <button id="btn-settings" class="corner-btn" title="Kartes un skaņas iestatījumi"
+          data-i18n-title="btn.settings.title">⚙️</button>
 </div>
 
 <div id="settings-pop" class="hidden">
-  <label class="toggle"><input type="checkbox" id="set-pan" checked> Map panning</label>
-  <label class="toggle"><input type="checkbox" id="set-zoom" checked> Map zooming</label>
-  <label class="toggle"><input type="checkbox" id="set-sound" checked> Sound</label>
-  <button id="set-reset" class="btn btn-small">⟲ Reset view</button>
+  <label class="toggle"><input type="checkbox" id="set-pan" checked> <span data-i18n="set.pan">Kartes pārvietošana</span></label>
+  <label class="toggle"><input type="checkbox" id="set-zoom" checked> <span data-i18n="set.zoom">Kartes tālummaiņa</span></label>
+  <label class="toggle"><input type="checkbox" id="set-sound" checked> <span data-i18n="set.sound">Skaņa</span></label>
+  <label class="toggle" id="set-fast-row"><input type="checkbox" id="set-fast"> <span data-i18n="set.fast">Ātrais režīms</span></label>
+  <label class="toggle"><span data-i18n="set.lang">Valoda</span> <select id="set-lang">
+    <option value="lv">Latviešu</option>
+    <option value="en">English</option>
+  </select></label>
+  <button id="set-reset" class="btn btn-small" data-i18n="set.reset">⟲ Atiestatīt skatu</button>
 </div>
 
-<div id="attribution">Map data © <a href="https://www.openstreetmap.org/copyright"
-  target="_blank" rel="noopener">OpenStreetMap</a> contributors</div>
+<div id="attribution"><span data-i18n="attr.pre">Kartes dati © </span><a
+  href="https://www.openstreetmap.org/copyright"
+  target="_blank" rel="noopener">OpenStreetMap</a><span data-i18n="attr.post"> dalībnieki</span></div>
 
-<script src="data/riga_data.js?v=53"></script>
-<script src="data/latvia_data.js?v=53"></script>
-<script src="js/geometry.js?v=53"></script>
-<script src="js/spatial.js?v=53"></script>
-<script src="js/view.js?v=53"></script>
-<script src="js/renderer.js?v=53"></script>
-<script src="js/levels.js?v=53"></script>
-<script src="js/storage.js?v=53"></script>
-<script src="js/sound.js?v=53"></script>
-<script src="js/study.js?v=53"></script>
-<script src="js/game.js?v=53"></script>
-<script src="js/hoodgame.js?v=53"></script>
-<script src="js/featgame.js?v=53"></script>
-<script src="js/ui.js?v=53"></script>
-<script src="js/main.js?v=53"></script>
+<script src="data/riga_data.js?v=54"></script>
+<script src="data/latvia_data.js?v=54"></script>
+<script src="js/geometry.js?v=54"></script>
+<script src="js/spatial.js?v=54"></script>
+<script src="js/view.js?v=54"></script>
+<script src="js/renderer.js?v=54"></script>
+<script src="js/levels.js?v=54"></script>
+<script src="js/storage.js?v=54"></script>
+<script src="js/i18n.js?v=54"></script>
+<script src="js/sound.js?v=54"></script>
+<script src="js/game.js?v=54"></script>
+<script src="js/hoodgame.js?v=54"></script>
+<script src="js/featgame.js?v=54"></script>
+<script src="js/ui.js?v=54"></script>
+<script src="js/main.js?v=54"></script>
 </body>
 </html>

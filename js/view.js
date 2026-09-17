@@ -17,9 +17,10 @@
     onHover: null,   // (worldX, worldY, clientX, clientY) or (null) when leaving
     bounds: null,
     lastFit: null,   // bbox of the most recent fitBbox — "Reset view" target
-    topInset: 0,     // px hidden under the top HUD/study bar; fits avoid it
+    topInset: 0,     // px hidden under the top HUD bar; fits avoid it
     panLock: false,  // settings: ignore USER pan/zoom input; programmatic
-    zoomLock: false  //   moves (fitBbox, centerOn, reveals) still work
+    zoomLock: false, //   moves (fitBbox, centerOn, reveals) still work
+    fastClick: false // settings: a mouse press IS the click (needs panLock)
   };
 
   view.worldToScreen = function (x, y) {
@@ -114,6 +115,7 @@
     var pointers = new Map();
     var moved = false;
     var downAt = null;
+    var fastFired = false; // this gesture's click already fired on press
     var pinchDist = 0;
 
     function pos(e) {
@@ -128,6 +130,16 @@
       if (pointers.size === 1) {
         moved = false;
         downAt = pos(e);
+        fastFired = false;
+        // Fast mode: the press is the click. Mouse-only (a touch may grow
+        // into a pan/pinch) and only under panLock — with panning enabled
+        // a press is ambiguously the start of a drag.
+        if (view.fastClick && view.panLock &&
+            e.pointerType === "mouse" && view.onClick) {
+          fastFired = true;
+          var fw = view.screenToWorld(downAt[0], downAt[1]);
+          view.onClick(fw[0], fw[1], e.clientX, e.clientY);
+        }
       }
       if (pointers.size === 2) {
         var pts = Array.from(pointers.values());
@@ -141,17 +153,20 @@
         var prev = pointers.get(e.pointerId);
         pointers.set(e.pointerId, p);
         if (pointers.size === 1) {
-          if (view.panLock) return; // locked: every press stays a click
           // Drag slop: fast clicks carry a few px of jitter — the map must
-          // not pan until the pointer clearly leaves the press point.
+          // not pan until the pointer clearly leaves the press point. Past
+          // the slop the gesture is a drag and can no longer click; panLock
+          // only keeps the map still, it does not keep the click alive.
           if (!moved) {
             if (downAt && Math.hypot(p[0] - downAt[0], p[1] - downAt[1]) > 5) {
               moved = true;
-              view.tx += p[0] - downAt[0]; // catch up: a real drag loses nothing
-              view.ty += p[1] - downAt[1];
-              changed();
+              if (!view.panLock) {
+                view.tx += p[0] - downAt[0]; // catch up: a real drag loses nothing
+                view.ty += p[1] - downAt[1];
+                changed();
+              }
             }
-          } else {
+          } else if (!view.panLock) {
             view.tx += p[0] - prev[0];
             view.ty += p[1] - prev[1];
             changed();
@@ -175,7 +190,7 @@
       var p = pointers.get(e.pointerId);
       pointers.delete(e.pointerId);
       pinchDist = 0;
-      if (!moved && pointers.size === 0 && view.onClick) {
+      if (!moved && !fastFired && pointers.size === 0 && view.onClick) {
         var at = downAt || p; // clicks land where the press aimed
         var w = view.screenToWorld(at[0], at[1]);
         view.onClick(w[0], w[1], e.clientX, e.clientY);

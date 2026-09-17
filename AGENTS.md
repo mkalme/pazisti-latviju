@@ -1,10 +1,13 @@
-# Riga Streets — agent guide
+# Pazīsti Latviju — agent guide
 
-A Seterra-style geography game for learning Riga: the game names a street /
-neighborhood / bridge / park / transit line, the player clicks it on a canvas
-map. Vanilla HTML/CSS/JS, **no build step, no dependencies, no Node** — the
-page works from `file://`. Data comes from OpenStreetMap via a Python-stdlib
-pipeline. UI text is English; all object names are Latvian (UTF-8 diacritics).
+A Seterra-style geography game for learning Latvia and Riga: the game names
+a street / neighborhood / bridge / park / transit line / municipality /
+city / river / lake / …, the player clicks it on a canvas map. Vanilla
+HTML/CSS/JS, **no build step, no dependencies, no Node** — the page works
+from `file://`. Data comes from OpenStreetMap via a Python-stdlib pipeline.
+UI text is LATVIAN by default with English behind the ⚙️ language switcher
+(`js/i18n.js`); all object names are Latvian (UTF-8 diacritics) and are
+never translated.
 
 ## Run / rebuild
 
@@ -32,14 +35,28 @@ pipeline. UI text is English; all object names are Latvian (UTF-8 diacritics).
 - `js/spatial.js` — 250 m grid over streets; `query/queryAll/pick` (pick =
   nearest, ties to the SMALLEST feature: a bridge beats the avenue over it).
 - `js/view.js` — pan/zoom/pinch; 5 px drag slop so fast clicks never pan;
-  clicks resolve at the press point. `panLock`/`zoomLock` disable USER
-  input only (programmatic fits/reveals still move); `topInset` (set by
+  clicks resolve at the press point. Moving past the slop makes the
+  gesture a drag and CANCELS the click even under `panLock` (the lock
+  only keeps the map still). `fastClick` ("Ātrais režīms", pref `fast`)
+  fires the click on mouse-down — mouse-only and only while `panLock` is
+  on (its checkbox is disabled otherwise: with panning on, a press may be
+  a drag start). `panLock`/`zoomLock` disable USER input only
+  (programmatic fits/reveals still move); `topInset` (set by
   `ui.showScreen` from the floating bar's height) keeps fits below the
   HUD; `lastFit` remembers the latest `fitBbox` target for "Reset view".
   The ⚙️ settings popover (wired in main.js, prefs-persisted) holds the
-  pan/zoom locks, the ONLY sound toggle and Reset view — corner buttons
-  are just theme + gear. ↻ Restart lives in the game HUD bar next to
-  Skip (`App.restartLevel`).
+  pan/zoom locks, the ONLY sound toggle, fast mode, the language select
+  and Reset view — corner buttons are just theme + gear. ↻ Restart lives
+  in the game HUD bar next to Skip (`App.restartLevel`).
+- `js/i18n.js` — `App.i18n`: the `STRINGS` table (lv + en), `t(key,
+  params)` with `{x}` substitution and lv→en→key fallback, `n(count,
+  unitKey)` count agreement (LV singular at n%10==1 && n%100!=11),
+  `levelName/levelNote` (fixed levels carry `nameKey`/`noteKey`;
+  per-apkaime and per-novads levels keep data names), and `apply()` for
+  the `data-i18n`/`data-i18n-title`/`data-i18n-placeholder` markup
+  (authored in Latvian). `App.setLang` (main.js) re-applies chrome,
+  rebuilds the menu and refreshes the HUD level name in place. The brand
+  "Pazīsti Latviju" is invariant and lives directly in the markup.
 - `js/renderer.js` — canvas: cached overscanned base layer + light overlay.
   Pan/zoom blit the stale base (low-res mid-gesture) and re-render sharp on
   settle; the frame loop force-redraws before blank ever composites. Dynamic
@@ -58,8 +75,8 @@ pipeline. UI text is English; all object names are Latvian (UTF-8 diacritics).
     `App.geom.hoodsAt` (every containing unit, smallest bbox first).
     State cities are magnetic within `App.geom.cityPickTol()` (10 px,
     capped at 4 km world — narrow viewports would otherwise blow the band
-    past 10 km): the pick resolves to the near city in hover, clicks,
-    wrong-click naming and study alike, unless the point sits exactly
+    past 10 km): the pick resolves to the near city in hover, clicks and
+    wrong-click naming alike, unless the point sits exactly
     inside another city. The band applies while a city's NARROW bbox
     dimension is under ~3.5 bands (long-thin Jūrmala needs it as much as
     little Ogre); anything wider — Rīga always, others once zoomed in —
@@ -73,10 +90,12 @@ pipeline. UI text is English; all object names are Latvian (UTF-8 diacritics).
   bridges/parks), transport, 58 per-neighborhood street levels.
 - `js/ui.js` — menu card grid w/ canvas thumbnails (cached per theme),
   diacritic-insensitive hood search, HUD, tooltip, summary. Kind-specific
-  wording/datasets live in the `KIND_*` lookups — extend those, not ternaries.
-- `js/study.js` — study mode; Districts toggle switches hover/pins from
-  streets to neighborhoods (forced + locked on streetless datasets).
-  `js/storage.js` — localStorage bests (`rigaStreets.v1`) + prefs; Latvia
+  wording/datasets live in the `KIND_*` lookups (wording tables hold i18n
+  KEYS, resolved at render time) — extend those, not ternaries.
+  `js/storage.js` — localStorage bests (`rigaStreets.v1`) + prefs
+  (`rigaStreets.prefs`: theme/muted/pan/zoom/fast/lang — the
+  `rigaStreets.*` key names are KEPT after the rebrand on purpose, or
+  saved bests/prefs would be orphaned); Latvia
   level ids are `lv:`-prefixed to keep the flat namespace collision-free.
   `js/sound.js` — WebAudio synth. `js/main.js` — boot, theme, engine
   dispatch via the `ENGINE_BY_KIND` map, and `App.useDataset(d)` — the
@@ -141,7 +160,7 @@ parent appended, towns are `city`-flagged for magnetic picks). It plays
 through hoodgame on a virtual dataset clone (`Object.assign({}, lv,
 {hoods: lv.pagasti})` in levels.js) — one marathon card plus a
 searchable per-novads section. Menu: the per-novads levels ("Pagasti", folder card in the Latvia row)
-and ALL Riga street modes ("Riga streets" folder card in the Citywide
+and ALL Riga street modes ("Rīgas ielas" folder card in the Rīga
 row: majors + whole city + 58 per-hood levels) open as SUBMENU pages
 (`setCategory` in ui.js: #menu-root swaps for #menu-sub with a Back
 button, title and the search box; Escape goes back; the open category

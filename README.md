@@ -1,8 +1,12 @@
-# Riga Streets
+# Pazīsti Latviju
 
-A Seterra-style game for learning the street layout of Riga. The game names a
-street — you click it on the map. Green: first try. Yellow: second. Orange:
-third. Red: revealed after three misses (or a skip).
+A Seterra-style game for learning the geography of Latvia and Riga. The game
+names a place — a street, neighborhood, municipality, city, river, lake … —
+and you click it on the map. Green: first try. Yellow: second. Orange: third.
+Red: revealed after three misses (or a skip).
+
+The UI is Latvian by default; English is available from the ⚙️ settings
+popover (the choice is remembered).
 
 ## Play
 
@@ -25,13 +29,15 @@ so rebuilt data and code changes always show up on plain reload.)
   line ("Click: Tramvajs 10 (Bišumuiža – Centrāltirgus)") and you click
   anywhere along its route.
 - **Neighborhood levels**: one per apkaime (Vecrīga, Centrs, Āgenskalns, …).
-- **Study mode**: pan/zoom freely, hover for names, click to pin labels.
-  The **Districts** toggle switches from streets to neighborhoods (hover a
-  district for its name, pin district labels); Shading and Majors-only
-  toggles adjust the backdrop.
-- Controls: drag to pan, scroll to zoom, `S` to skip a street, `Esc` for menu.
-- Bottom-left buttons: light/dark theme and sound on/off (synthesized effects,
-  no audio files). Both preferences are remembered.
+- **Latvia levels**: state cities & municipalities, city dots in two
+  population tiers, the full pagasti mosaic (marathon + one level per
+  novads), historical lands, rivers, lakes, the A-road network, castles,
+  and national parks & reserves.
+- Controls: drag to pan, scroll to zoom, `S` to skip, `Esc` for menu.
+- Bottom-left buttons: light/dark theme and the ⚙️ settings popover — map
+  panning/zooming locks, sound (synthesized effects, no audio files),
+  **fast mode** (with panning locked, a mouse press counts as the click),
+  language, and Reset view. All preferences are remembered.
 - Best results per level are stored in your browser (localStorage).
 
 ## Regenerating the map data
@@ -45,6 +51,13 @@ python3 tools/build_data.py    # processes it into data/riga_data.js
 
 `fetch_osm.py` skips files already in `data/raw/` — delete them to force a
 fresh download. Both scripts use only the Python standard library.
+
+The Latvia dataset (`data/latvia_data.js`) is built the same way:
+
+```
+python3 tools/fetch_osm.py latvia_
+python3 tools/build_latvia.py
+```
 
 ### How a "street" is defined
 
