@@ -340,6 +340,7 @@
 
   var tip = document.getElementById("tip");
   var hoverFeat = -1;
+  var hoverWx = 0, hoverWy = 0; // world point the tooltip is pinned to
   var flashes = new Map();   // feat -> timeout id
 
   // One physical street can be several entities (an A corridor plus the
@@ -353,7 +354,17 @@
     return feat > 0 ? grpMembers[data.streets[feat - 1].grp] : [];
   }
 
-  function setHover(feat, cx, cy) {
+  /* Reprojects the tooltip onto its pinned world point through the CURRENT
+     view transform — called on every hover move and every animation frame,
+     so wheel-zoom easing and momentum panning carry it along with the map
+     instead of leaving it stranded at a stale screen position. */
+  function positionTip() {
+    var s = view.worldToScreen(hoverWx, hoverWy);
+    tip.style.left = (s[0] + 14) + "px";
+    tip.style.top = (s[1] + 14) + "px";
+  }
+
+  function setHover(feat) {
     if (hoverFeat !== feat) {
       groupOf(hoverFeat).forEach(function (f) {
         if (!flashes.has(f)) { setTexel(f, baseColor(f)); uploadTexel(f); }
@@ -367,17 +378,18 @@
     if (feat > 0) {
       tip.textContent = data.streets[feat - 1].name;
       tip.style.display = "block";
-      tip.style.left = (cx + 14) + "px";
-      tip.style.top = (cy + 14) + "px";
+      positionTip();
     } else {
       tip.style.display = "none";
     }
   }
 
-  view.onHover = function (wx, wy, cx, cy) {
+  view.onHover = function (wx, wy) {
     if (wx === null) { setHover(-1); return; }
+    hoverWx = wx;
+    hoverWy = wy;
     var hit = App.spatial.pick(wx, wy, 8 / view.scale);
-    setHover(hit ? hit.id + 1 : -1, cx, cy);
+    setHover(hit ? hit.id + 1 : -1);
   };
 
   view.onClick = function (wx, wy) {
@@ -491,6 +503,8 @@
   var lastT = 0, emaMs = 0, lastHud = 0;
 
   function frame(now) {
+    view.tick(now);
+    if (hoverFeat > 0) positionTip();
     if (lastT) {
       var dt = now - lastT;
       emaMs = emaMs ? emaMs * 0.9 + dt * 0.1 : dt;

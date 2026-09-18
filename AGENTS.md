@@ -49,7 +49,19 @@ never translated.
   The ⚙️ settings popover (wired in main.js, prefs-persisted) holds the
   pan/zoom locks, the ONLY sound toggle, fast mode, the language select
   and Reset view — corner buttons are just theme + gear. ↻ Restart lives
-  in the game HUD bar next to Skip (`App.restartLevel`).
+  in the game HUD bar next to Skip (`App.restartLevel`). Wheel zoom and
+  released-drag panning are ANIMATED (ported from the camera in
+  Voxelview/MapeeWeb): a wheel notch nudges a target scale that
+  `view.tick(now)` eases toward every frame in log space, re-pinning the
+  world point under the cursor (`WHEEL_ZOOM_EXPONENT` sets per-notch
+  strength, `ZOOM_TAU_MS` the ease speed); a released drag hands its
+  recency-weighted, coherence-gated recent velocity to an ease-out glide
+  (`INERTIA_*` constants) that `view.tick` also advances. Pinch and
+  programmatic moves (`fitBbox`/`centerOn`) stay instant — `haltMotion()`
+  cancels both on a fresh gesture or a jump so neither fights it. **Any
+  render loop reading `App.view` must call `view.tick(now)` every rAF
+  frame** or zoom/pan silently stalls (a target/glide gets set but never
+  advances) — both `js/renderer.js` and `proto/gl.js` do this.
 - `js/i18n.js` — `App.i18n`: the `STRINGS` table (lv + en), `t(key,
   params)` with `{x}` substitution and lv→en→key fallback, `n(count,
   unitKey)` count agreement (LV singular at n%10==1 && n%100!=11),

@@ -45,6 +45,7 @@
   }
 
   view.fitBbox = function (bbox, padFrac) {
+    haltMotion(); // a jump must not later get overridden by a stale ease/glide
     padFrac = padFrac === undefined ? 0.08 : padFrac;
     view.lastFit = bbox;
     var w = Math.max(1, bbox[2] - bbox[0]);
@@ -58,6 +59,7 @@
   };
 
   view.centerOn = function (x, y) {
+    haltMotion();
     view.tx = view.cssW / 2 - x * view.scale;
     view.ty = view.cssH / 2 - y * view.scale;
     changed();
@@ -74,6 +76,152 @@
     changed();
   }
   view.zoomAt = zoomAt;
+
+  /* Eased wheel zoom + momentum panning, both driven by one view.tick(now)
+     called from the renderer's rAF loop. Pinch and programmatic moves
+     (fitBbox/centerOn) stay instant/unglided — matching how the reference
+     camera (Voxelview/MapeeWeb) scopes ZoomAnim to wheel/dblclick and
+     DragInertia to a released single-pointer drag, leaving direct
+     manipulation 1:1. */
+  var WHEEL_ZOOM_EXPONENT = 0.0024; // deltaY -> zoom exponent; higher = stronger per notch
+  var ZOOM_TAU_MS = 55;
+  var ZOOM_SNAP = 0.002;
+  var zoomTarget = 0;  // 0 = unseeded, adopts view.scale on the next nudge
+  var zoomActive = false;
+  var zoomAnchorSx = 0, zoomAnchorSy = 0; // screen px the world point pins under
+  var zoomAnchorWx = 0, zoomAnchorWy = 0; // that world point
+
+  // Momentum glide after a released drag: a trailing window of recent
+  // pointermove velocities is recency-weighted and coherence-gated (a
+  // wobbly/reversing drag should not fling) into a release velocity, then
+  // eased out over a duration scaled to that speed.
+  var INERTIA_MAX_MS = 1250;
+  var INERTIA_MIN_MS = 250;
+  var INERTIA_POWER = 0.5;
+  var INERTIA_MIN_SPEED = 0.15;   // px/ms release speed floor — below this, no glide
+  var INERTIA_MAX_SPEED = 8;      // px/ms release speed ceiling — clamps wild flicks
+  var INERTIA_SAMPLE_WINDOW_MS = 90;
+  var INERTIA_RELEASE_GAP_MS = 80; // a pause before release cancels the fling
+  var INERTIA_MIN_COHERENCE = 0.4;
+  var INERTIA_FULL_COHERENCE = 0.85;
+  var inertiaActive = false;
+  var inertiaDurMs = 0, inertiaElapsedMs = 0, inertiaFPrev = 0;
+  var inertiaDistX = 0, inertiaDistY = 0;
+  var inertiaSamples = []; // flat [vx, vy, ts, ...] px/ms, trailing window
+  var inertiaPrevMoveTs = 0;
+
+  var lastTickT = 0;
+
+  /* Cancels an in-flight ease/glide: call on a fresh gesture start or a
+     programmatic jump, so neither fights the new motion. */
+  function haltMotion() {
+    zoomActive = false;
+    zoomTarget = 0;
+    inertiaActive = false;
+    inertiaSamples.length = 0;
+    inertiaPrevMoveTs = 0;
+  }
+
+  function nudgeZoom(sx, sy, factor) {
+    if (view.zoomLock) return;
+    if (zoomTarget === 0) zoomTarget = view.scale;
+    var w = view.screenToWorld(sx, sy);
+    zoomAnchorWx = w[0];
+    zoomAnchorWy = w[1];
+    zoomAnchorSx = sx;
+    zoomAnchorSy = sy;
+    zoomTarget = clampScale(zoomTarget * factor);
+    zoomActive = true;
+  }
+  view.nudgeZoom = nudgeZoom;
+
+  /* Feed one drag movement (screen px deltas, event.timeStamp ms). */
+  function inertiaMove(dx, dy, ts) {
+    if (inertiaPrevMoveTs > 0) {
+      var dt = Math.max(1, ts - inertiaPrevMoveTs);
+      inertiaSamples.push(dx / dt, dy / dt, ts);
+    }
+    inertiaPrevMoveTs = ts;
+    var cutoff = ts - INERTIA_SAMPLE_WINDOW_MS;
+    var drop = 0;
+    while (drop + 2 < inertiaSamples.length && inertiaSamples[drop + 2] < cutoff) drop += 3;
+    if (drop > 0) inertiaSamples.splice(0, drop);
+  }
+
+  /* Pointer released: derive a release velocity from the trailing samples
+     and maybe start the glide. */
+  function inertiaRelease(ts) {
+    var s = inertiaSamples;
+    inertiaPrevMoveTs = 0;
+    if (s.length < 6) { s.length = 0; return; }
+    var lastTs = s[s.length - 1];
+    if (ts - lastTs > INERTIA_RELEASE_GAP_MS) { s.length = 0; return; }
+    var firstTs = s[2];
+    var span = Math.max(1, lastTs - firstTs);
+    var sumX = 0, sumY = 0, sumW = 0, sumSpd = 0;
+    for (var i = 0; i < s.length; i += 3) {
+      var w = 1 + 3 * ((s[i + 2] - firstTs) / span); // recency-weighted
+      sumX += s[i] * w;
+      sumY += s[i + 1] * w;
+      sumSpd += Math.sqrt(s[i] * s[i] + s[i + 1] * s[i + 1]) * w;
+      sumW += w;
+    }
+    var vx = sumX / sumW, vy = sumY / sumW;
+    s.length = 0;
+    var speed = Math.sqrt(vx * vx + vy * vy);
+    var meanSpd = sumSpd / sumW;
+    // coherence: 1 if every sample pointed the same way as the average, less
+    // if the drag wobbled or reversed — a wobble must not fling.
+    var coherence = meanSpd > 1e-6 ? speed / meanSpd : 0;
+    var cGate = Math.min(1, Math.max(0,
+      (coherence - INERTIA_MIN_COHERENCE) / (INERTIA_FULL_COHERENCE - INERTIA_MIN_COHERENCE)));
+    vx *= cGate; vy *= cGate; speed *= cGate;
+    if (speed < INERTIA_MIN_SPEED) return;
+    if (speed > INERTIA_MAX_SPEED) {
+      vx *= INERTIA_MAX_SPEED / speed;
+      vy *= INERTIA_MAX_SPEED / speed;
+      speed = INERTIA_MAX_SPEED;
+    }
+    var T = Math.max(INERTIA_MIN_MS,
+      INERTIA_MAX_MS * Math.pow(speed / INERTIA_MAX_SPEED, INERTIA_POWER));
+    inertiaDurMs = T;
+    inertiaElapsedMs = 0;
+    inertiaFPrev = 0;
+    inertiaDistX = vx * T / 3;
+    inertiaDistY = vy * T / 3;
+    inertiaActive = true;
+  }
+
+  /* Advance the eased zoom + momentum glide one frame (now = rAF timestamp);
+     a cheap no-op while neither is in flight. */
+  view.tick = function (now) {
+    var dt = lastTickT ? Math.min(50, Math.max(0.1, now - lastTickT)) : 16;
+    lastTickT = now;
+    if (!zoomActive && !inertiaActive) return;
+    if (zoomActive) {
+      var k = 1 - Math.exp(-dt / ZOOM_TAU_MS);
+      var lz = Math.log(view.scale), lt = Math.log(zoomTarget);
+      if (Math.abs(lt - lz) < ZOOM_SNAP) {
+        view.scale = zoomTarget;
+        zoomActive = false;
+      } else {
+        view.scale = Math.exp(lz + (lt - lz) * k);
+      }
+      view.tx = zoomAnchorSx - zoomAnchorWx * view.scale;
+      view.ty = zoomAnchorSy - zoomAnchorWy * view.scale;
+    }
+    if (inertiaActive) {
+      inertiaElapsedMs += dt;
+      var u = Math.min(1, inertiaElapsedMs / inertiaDurMs);
+      var inv = 1 - u;
+      var f = 1 - inv * inv * inv; // ease-out cubic
+      view.tx += (f - inertiaFPrev) * inertiaDistX;
+      view.ty += (f - inertiaFPrev) * inertiaDistY;
+      inertiaFPrev = f;
+      if (u >= 1) inertiaActive = false;
+    }
+    changed();
+  };
 
   function updateMinScale() {
     if (!view.bounds || !(view.cssW > 0)) return;
@@ -131,6 +279,7 @@
         moved = false;
         downAt = pos(e);
         fastFired = false;
+        haltMotion(); // a fresh drag/pinch must not fight an in-flight ease/glide
         // Fast mode: the press is the click. Mouse-only (a touch may grow
         // into a pan/pinch) and only under panLock — with panning enabled
         // a press is ambiguously the start of a drag.
@@ -169,6 +318,7 @@
           } else if (!view.panLock) {
             view.tx += p[0] - prev[0];
             view.ty += p[1] - prev[1];
+            inertiaMove(p[0] - prev[0], p[1] - prev[1], e.timeStamp);
             changed();
           }
         } else if (pointers.size === 2) {
@@ -195,6 +345,7 @@
         var w = view.screenToWorld(at[0], at[1]);
         view.onClick(w[0], w[1], e.clientX, e.clientY);
       }
+      if (moved && pointers.size === 0) inertiaRelease(e.timeStamp);
     }
     canvas.addEventListener("pointerup", release);
     canvas.addEventListener("pointercancel", function (e) { pointers.delete(e.pointerId); });
@@ -205,7 +356,7 @@
     canvas.addEventListener("wheel", function (e) {
       e.preventDefault();
       var p = pos(e);
-      zoomAt(p[0], p[1], Math.exp(-e.deltaY * 0.0015));
+      nudgeZoom(p[0], p[1], Math.exp(-e.deltaY * WHEEL_ZOOM_EXPONENT));
     }, { passive: false });
   };
 

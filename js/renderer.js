@@ -678,6 +678,7 @@
   }
 
   function frame(now) {
+    App.view.tick(now);
     var c = renderer.canvas;
     if (c.clientWidth > 0 &&
         (c.clientWidth !== App.view.cssW || c.clientHeight !== App.view.cssH)) {
